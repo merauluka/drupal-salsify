@@ -2,11 +2,11 @@ langcode: en
 status: true
 dependencies:
   module:
-    - rinnai_salsify
+    - salsify_integration
 title: 'Salsify: Midnight refresh of product fields and data'
-id: rinnai_salsify_midnight_import
-module: rinnai_salsify
-callback: rinnai_salsify_midnight_import
+id: salsify_integration_midnight_import
+module: salsify_integration
+callback: salsify_integration_midnight_import
 scheduler:
   id: crontab
   configuration:
