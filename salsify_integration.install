@@ -1,0 +1,146 @@
+<?php
+
+/**
+ * @file
+ * The Salsify integration install file.
+ */
+
+use \Drupal\field\Entity\FieldConfig;
+
+/**
+ * Implements hook_schema().
+ */
+function salsify_integration_schema() {
+  $schema['salsify_field_data'] = [
+    'description' => 'The table to track Salsify fields and their Drupal counterparts.',
+    'fields' => [
+      'field_id' => [
+        'description' => 'The Salsify system id used as the primary identifier for a field mapping.',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+      ],
+      'salsify_id' => [
+        'description' => 'The value of salsify:id for this field.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'salsify_data_type' => [
+        'description' => 'The value of salsify:data_type for this field.',
+        'type' => 'varchar',
+        'length' => 128,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'field_name' => [
+        'description' => 'The machine name of the Drupal field',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'created' => [
+        'description' => 'The timestamp the field mapping was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+      'changed' => [
+        'description' => 'The timestamp the field mapping was updated.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+    ],
+    'primary key' => ['field_id'],
+  ];
+
+  $schema['salsify_import'] = [
+    'description' => 'The table to track Salsify imports.',
+    'fields' => [
+      'created' => [
+        'description' => 'The timestamp the Salsify import was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+      'completed' => [
+        'description' => 'The timestamp the Salsify import was completed.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+      'queue_name' => [
+        'description' => 'The name of the Drupal queue processing the import.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+      'status' => [
+        'description' => 'The status of the import.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+    ],
+    'primary key' => ['created'],
+  ];
+
+  $schema['salsify_import_log'] = [
+    'description' => 'The table to track Salsify import log data',
+    'fields' => [
+      'created' => [
+        'description' => 'The timestamp the field mapping was created.',
+        'type' => 'int',
+        'not null' => TRUE,
+      ],
+      'message' => [
+        'description' => 'The message returned by the import process.',
+        'type' => 'blob',
+        'not null' => TRUE,
+        'size' => 'big',
+      ],
+      'status' => [
+        'description' => 'The status of the import.',
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+        'default' => '',
+      ],
+    ],
+    'primary key' => ['created'],
+  ];
+
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ *
+ * Clean up the dynamically added fields to prevent leaving behind large
+ * quantities of data that shoudn't remain in the system.
+ */
+function salsify_integration_uninstall() {
+  $config = \Drupal::config('salsify_integration.settings');
+  if (!$config->get('keep_fields_on_uninstall')) {
+    $content_type = $config->get('content_type');
+    $field_mapping = \Drupal::database()->select('salsify_field_data', 'f')
+      ->fields('f')
+      ->execute()
+      ->fetchAllAssoc('field_name');
+
+    // Load the fields, filter them by the fields in the Salsify mapping table,
+    // and remove them before uninstalling the module.
+    $fields = \Drupal::service('entity_field.manager')
+      ->getFieldDefinitions('node', $content_type);
+    $filtered_fields = array_filter(
+      $fields, function ($field_definition) {
+        return $field_definition instanceof FieldConfig;
+      }
+    );
+    $salsify_fields = array_intersect_key($filtered_fields, $field_mapping);
+    foreach ($salsify_fields as $field) {
+      $field->delete();
+    }
+  }
+}

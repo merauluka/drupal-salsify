@@ -1,0 +1,6 @@
+services:
+  salsify_integration.content_type_field_check:
+    class: '\Drupal\salsify_integration\EventSubscriber\SalsifySubscriber'
+    arguments: ['@queue']
+    tags:
+      - { name: 'event_subscriber' }

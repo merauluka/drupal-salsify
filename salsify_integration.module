@@ -1,0 +1,74 @@
+<?php
+
+/**
+ * @file
+ * The Salsify integration module.
+ */
+
+use \Drupal\Core\Entity\EntityInterface;
+use \Drupal\Core\Entity\FieldableEntityInterface;
+use \Drupal\Core\Field\FieldStorageDefinitionInterface;
+use \Drupal\field\Entity\FieldStorageConfig;
+use \Drupal\salsify_integration\Salsify;
+
+/**
+ * The cron job definition to kick off the midnight Salsify import process.
+ */
+function salsify_integration_midnight_import($job) {
+  $container = \Drupal::getContainer();
+  $product_feed = Salsify::create($container);
+  $product_feed->importProductData();
+  $logger->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
+}
+
+/**
+ * Implements callback_allowed_values_function().
+ *
+ * @see options_allowed_values()
+ */
+function salsify_integration_allowed_values_callback(FieldStorageDefinitionInterface $definition, FieldableEntityInterface $entity = NULL) {
+  $options_config = \Drupal::config('salsify_integration.field_options');
+  $salsify_id = salsify_integration_get_salsify_id($definition->getName());
+  $options = $options_config->get($salsify_id[0]);
+  if ($options) {
+    return $options;
+  }
+  return [];
+}
+
+/**
+ * Looks up a Drupal field's Salsify ID from the mapping table.
+ */
+function salsify_integration_get_salsify_id($field_name) {
+  return \Drupal::database()->select('salsify_field_data', 'f')
+    ->fields('f', array('field_id'))
+    ->condition('field_name', $field_name, '=')
+    ->range(0, 1)
+    ->execute()
+    ->fetchCol('field_id');
+}
+
+/**
+ * Utility function to clean up Salsify data if fields are deleted from Drupal.
+ */
+function salsify_integration_field_config_delete(EntityInterface $field) {
+  // Get the field name and use it to look up the field_id from the mapping
+  // table.
+  $field_name = $field->get('field_name');
+  $field_storage = FieldStorageConfig::loadByName('node', $field_name);
+
+  if ($field_storage) {
+    // If the field is still set somewhere on the system, then don't remove it
+    // and leave the field mapping intact.
+    $bundles = $field_storage->getBundles();
+
+    if (empty($bundles)) {
+      $field_id = salsify_integration_get_salsify_id($field_name)[0];
+      // Perform the deletion logic on the Salsify data.
+      $container = \Drupal::getContainer();
+      $salsify = Salsify::create($container);
+      $salsify->removeFieldOptions($field_id);
+      $salsify->deleteFieldMapping('field_id', $field_id);
+    }
+  }
+}

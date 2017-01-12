@@ -1,0 +1,4 @@
+access salsify config page:
+  title: 'Access Salsify config page'
+  description: 'Allows access to the Salsify integration configuration page.'
+  restrict access: true

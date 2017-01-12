@@ -1,0 +1,15 @@
+salsify_integration.configuration:
+  path: '/admin/config/services/salsify'
+  defaults:
+    _form: 'Drupal\salsify_integration\Form\ConfigForm'
+    _title: 'Salsify Integration'
+  requirements:
+    _permission: 'access salsify config page'
+
+salsify_integration.get_products:
+  path: '/api/salsify/get-products'
+  defaults:
+    _controller: '\Drupal\salsify_integration\Controller\SalsifyController::getProducts'
+    _title: 'Get Salsify products'
+  requirements:
+    _permission: 'access salsify config page'
