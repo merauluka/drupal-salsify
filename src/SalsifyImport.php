@@ -93,7 +93,7 @@ class SalsifyImport {
 
     // Load the existing node or generate a new one.
     if ($results) {
-      $nid = array_keys($results)[0];
+      $nid = array_values($results)[0];
       $node = $this->entityTypeManager->getStorage('node')->load($nid);
     }
     else {
@@ -138,10 +138,6 @@ class SalsifyImport {
           'title' => '',
           'options' => [],
         ];
-        break;
-
-      case 'date':
-        $options = strtotime($field_data);
         break;
 
       case 'enumerated':
