@@ -1,10 +1,10 @@
 <?php
 
-namespace Drupal\rinnai_salsify\Form;
+namespace Drupal\salsify_integration\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\rinnai_salsify\Salsify;
+use Drupal\salsify_integration\Salsify;
 
 /**
  * Distribution Configuration form class.
@@ -23,7 +23,7 @@ class ConfigForm extends ConfigFormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildForm($form, $form_state);
-    $config = $this->config('rinnai_salsify.settings');
+    $config = $this->config('salsify_integration.settings');
 
     $form['salsify_api_settings'] = [
       '#type' => 'fieldset',
@@ -117,7 +117,7 @@ class ConfigForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $config = $this->config('rinnai_salsify.settings');
+    $config = $this->config('salsify_integration.settings');
     $config->set('product_feed_url', $form_state->getValue('product_feed_url'));
     $config->set('access_token', $form_state->getValue('access_token'));
     $config->set('content_type', $form_state->getValue('content_type'));
@@ -133,7 +133,7 @@ class ConfigForm extends ConfigFormBase {
    */
   protected function getEditableConfigNames() {
     return [
-      'rinnai_salsify.settings',
+      'salsify_integration.settings',
     ];
   }
 

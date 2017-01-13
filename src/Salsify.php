@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\rinnai_salsify;
+namespace Drupal\salsify_integration;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\Query\QueryFactory;
@@ -16,7 +16,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Class Salsify.
  *
- * @package Drupal\rinnai_salsify
+ * @package Drupal\salsify_integration
  */
 class Salsify {
 
@@ -56,7 +56,7 @@ class Salsify {
   protected $logger;
 
   /**
-   * Constructs a \Drupal\rinnai_salsify\Salsify object.
+   * Constructs a \Drupal\salsify_integration\Salsify object.
    *
    * @param \Psr\Log\LoggerInterface $logger
    *   The logger interface.
@@ -68,9 +68,9 @@ class Salsify {
    *   The entity type manager.
    */
   public function __construct(LoggerInterface $logger, ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager) {
-    $this->logger = $logger;
+    $this->logger = $logger->get('salsify_integration');
     $this->configFactory = $config_factory;
-    $this->config = $this->configFactory->get('rinnai_salsify.settings');
+    $this->config = $this->configFactory->get('salsify_integration.settings');
     $this->entityQuery = $entity_query;
     $this->entityTypeManager = $entity_type_manager;
   }
@@ -80,7 +80,7 @@ class Salsify {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('logger.factory')->get('rinnai_salsify'),
+      $container->get('logger.factory'),
       $container->get('config.factory'),
       $container->get('entity.query'),
       $container->get('entity_type.manager')
@@ -647,7 +647,7 @@ class Salsify {
    *   The field level data from Salsify augmented with allowed values.
    */
   protected function setFieldOptions(array $salsify_data) {
-    $config = $this->configFactory->getEditable('rinnai_salsify.field_options');
+    $config = $this->configFactory->getEditable('salsify_integration.field_options');
     $options = [];
     if (isset($salsify_data['values'])) {
       foreach ($salsify_data['values'] as $value) {
@@ -665,7 +665,7 @@ class Salsify {
    *   The Salsify system id to remove from the options configuration.
    */
   public function removeFieldOptions($salsify_system_id) {
-    $config = $this->configFactory->getEditable('rinnai_salsify.field_options');
+    $config = $this->configFactory->getEditable('salsify_integration.field_options');
     if ($config->get($salsify_system_id)) {
       $config->clear($salsify_system_id);
       $config->save();

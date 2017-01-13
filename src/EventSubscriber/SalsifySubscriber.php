@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\rinnai_salsify\EventSubscriber;
+namespace Drupal\salsify_integration\EventSubscriber;
 
 use Drupal\Core\Config\ConfigCrudEvent;
 use Drupal\Core\Config\ConfigEvents;
@@ -52,7 +52,7 @@ class SalsifySubscriber implements EventSubscriberInterface {
    */
   public function checkContentTypeFields(ConfigCrudEvent $event) {
     $config = $event->getConfig();
-    if ($config->getName() == 'rinnai_salsify.settings') {
+    if ($config->getName() == 'salsify_integration.settings') {
       // Check to see if the content type was changed. If so, need to remove any
       // Salsify fields from the old content type and move them to the new.
       $changed = $event->isChanged('content_type');

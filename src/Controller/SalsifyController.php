@@ -1,9 +1,9 @@
 <?php
 
-namespace Drupal\rinnai_salsify\Controller;
+namespace Drupal\salsify_integration\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
-use Drupal\rinnai_salsify\Salsify;
+use Drupal\salsify_integration\Salsify;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**

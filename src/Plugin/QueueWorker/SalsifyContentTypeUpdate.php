@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\rinnai_salsify\Plugin\QueueWorker;
+namespace Drupal\salsify_integration\Plugin\QueueWorker;
 
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -8,7 +8,7 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Queue\QueueFactory;
 use Drupal\Core\Queue\QueueWorkerBase;
 use Drupal\field\Entity\FieldConfig;
-use Drupal\rinnai_salsify\Salsify;
+use Drupal\salsify_integration\Salsify;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**

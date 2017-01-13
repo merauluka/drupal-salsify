@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\rinnai_salsify;
+namespace Drupal\salsify_integration;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -14,7 +14,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * The main class used to perform content imports. Imports are trigger either
  * through queues during a cron run or via the configuration page.
  *
- * @package Drupal\rinnai_salsify
+ * @package Drupal\salsify_integration
  */
 class SalsifyImport {
 
@@ -47,7 +47,7 @@ class SalsifyImport {
   protected $entityTypeManager;
 
   /**
-   * Constructs a \Drupal\rinnai_salsify\Salsify object.
+   * Constructs a \Drupal\salsify_integration\Salsify object.
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory interface.
@@ -58,7 +58,7 @@ class SalsifyImport {
    */
   public function __construct(ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager) {
     $this->configFactory = $config_factory;
-    $this->config = $this->configFactory->get('rinnai_salsify.settings');
+    $this->config = $this->configFactory->get('salsify_integration.settings');
     $this->entityQuery = $entity_query;
     $this->entityTypeManager = $entity_type_manager;
   }

@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\rinnai_salsify\Plugin\QueueWorker;
+namespace Drupal\salsify_integration\Plugin\QueueWorker;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -8,7 +8,7 @@ use Drupal\Core\Entity\Query\QueryFactory;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Queue\QueueFactory;
 use Drupal\Core\Queue\QueueWorkerBase;
-use Drupal\rinnai_salsify\SalsifyImport;
+use Drupal\salsify_integration\SalsifyImport;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -73,7 +73,7 @@ class SalsifyContentImport extends QueueWorkerBase implements ContainerFactoryPl
     $this->entityQuery = $entity_query;
     $this->entityTypeManager = $entity_type_manager;
     $this->configFactory = $config_factory;
-    $this->config = $this->configFactory->get('rinnai_salsify.settings');
+    $this->config = $this->configFactory->get('salsify_integration.settings');
     $this->queueFactory = $queue_factory;
   }
 
