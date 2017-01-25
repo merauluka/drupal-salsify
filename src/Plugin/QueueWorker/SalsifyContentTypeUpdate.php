@@ -8,7 +8,7 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Queue\QueueFactory;
 use Drupal\Core\Queue\QueueWorkerBase;
 use Drupal\field\Entity\FieldConfig;
-use Drupal\salsify_integration\Salsify;
+use Drupal\salsify_integration\SalsifyMultiField;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -85,7 +85,7 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
     // Gather the fields from the old content type.
     $fields = $this->entityFieldManager->getFieldDefinitions('node', $original);
     // Load the field mappings for Salsify and Drupal.
-    $salsify_field_mapping = Salsify::getFieldMappings();
+    $salsify_field_mapping = SalsifyMultiField::getFieldMappings();
 
     foreach ($salsify_field_mapping as $salsify_field) {
       if (isset($fields[$salsify_field->field_name])) {
@@ -105,9 +105,9 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
         $new_field->save();
 
         // Create the form and view displays for the field.
-        Salsify::createFieldFormDisplay($current, $field_name, $salsify_field->salsify_data_type);
+        SalsifyMultiField::createFieldFormDisplay($current, $field_name, $salsify_field->salsify_data_type);
         foreach ($view_modes as $view_mode) {
-          Salsify::createFieldViewDisplay($current, $field_name, $view_mode);
+          SalsifyMultiField::createFieldViewDisplay($current, $field_name, $view_mode);
         }
 
         // The field has been moved. Remove it from the old content type.

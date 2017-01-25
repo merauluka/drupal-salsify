@@ -4,7 +4,8 @@ namespace Drupal\salsify_integration\Form;
 
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\salsify_integration\Salsify;
+use Drupal\salsify_integration\SalsifyMultiField;
+use Drupal\salsify_integration\SalsifySingleField;
 
 /**
  * Distribution Configuration form class.
@@ -96,6 +97,12 @@ class ConfigForm extends ConfigFormBase {
       '#default_value' => $config->get('keep_fields_on_uninstall'),
     ];
 
+    $form['import_method'] = [
+      '#type' => 'value',
+      '#value' => 'serialized',
+      '#default_value' => $config->get('import_method'),
+    ];
+
     return $form;
   }
 
@@ -106,9 +113,16 @@ class ConfigForm extends ConfigFormBase {
     $trigger = $form_state->getTriggeringElement();
     if ($trigger['#id'] == 'edit-salsify-start-import') {
       $container = \Drupal::getContainer();
-      $product_feed = Salsify::create($container);
-      $product_feed->importProductData(TRUE);
-      drupal_set_message($this->t('The Salsify data import is complete.'), 'status');
+      if ($form_state->getValue('import_method') == 'serialized') {
+        $product_feed = SalsifySingleField::create($container);
+      }
+      else {
+        $product_feed = SalsifyMultiField::create($container);
+      }
+      $results = $product_feed->importProductData(TRUE);
+      if ($results) {
+        drupal_set_message($results['message'], $results['status']);
+      }
     }
     parent::validateForm($form, $form_state);
   }
@@ -122,6 +136,7 @@ class ConfigForm extends ConfigFormBase {
     $config->set('access_token', $form_state->getValue('access_token'));
     $config->set('content_type', $form_state->getValue('content_type'));
     $config->set('keep_fields_on_uninstall', $form_state->getValue('keep_fields_on_uninstall'));
+    $config->set('import_method', $form_state->getValue('import_method'));
     // Save the configuration.
     $config->save();
 

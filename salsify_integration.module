@@ -9,16 +9,28 @@ use \Drupal\Core\Entity\EntityInterface;
 use \Drupal\Core\Entity\FieldableEntityInterface;
 use \Drupal\Core\Field\FieldStorageDefinitionInterface;
 use \Drupal\field\Entity\FieldStorageConfig;
-use \Drupal\salsify_integration\Salsify;
+use \Drupal\salsify_integration\SalsifyMultiField;
+use \Drupal\salsify_integration\SalsifySingleField;
 
 /**
  * The cron job definition to kick off the midnight Salsify import process.
  */
 function salsify_integration_midnight_import($job) {
   $container = \Drupal::getContainer();
-  $product_feed = Salsify::create($container);
-  $product_feed->importProductData();
-  $logger->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
+  $config = \Drupal::config('salsify_integration.settings');
+  switch ($config->get('import_method')) {
+    case 'serialized':
+      $product_feed = SalsifySingleField::create($container);
+      $product_feed->importProductData();
+      $logger->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
+      break;
+
+    case 'fields':
+      $product_feed = SalsifyMultiField::create($container);
+      $product_feed->importProductData();
+      $logger->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
+      break;
+  }
 }
 
 /**
@@ -64,11 +76,114 @@ function salsify_integration_field_config_delete(EntityInterface $field) {
 
     if (empty($bundles)) {
       $field_id = salsify_integration_get_salsify_id($field_name)[0];
-      // Perform the deletion logic on the Salsify data.
       $container = \Drupal::getContainer();
-      $salsify = Salsify::create($container);
+      // Perform the deletion logic on the Salsify data.
+      $salsify = SalsifyMultiField::create($container);
       $salsify->removeFieldOptions($field_id);
       $salsify->deleteFieldMapping('field_id', $field_id);
     }
+  }
+}
+
+/**
+ * Implements hook_theme().
+ */
+function salsify_integration_theme() {
+  return array(
+    // Normally theme suggestion templates are only picked up when they are in
+    // themes. Define theme suggestions here so that the block templates in
+    // the templates directory are picked up.
+    'salsify_field' => [
+      'render element' => 'salsify_fields',
+      'pattern' => 'salsify_field',
+      'template' => 'salsify-field',
+    ],
+    'salsify_field__boolean' => [
+      'render element' => 'salsify_fields',
+      'pattern' => 'salsify_field__',
+      'template' => 'salsify-field--boolean',
+    ],
+    'salsify_field__link' => [
+      'render element' => 'salsify_fields',
+      'pattern' => 'salsify_field__',
+      'template' => 'salsify-field--link',
+    ],
+    'salsify_field__html' => [
+      'render element' => 'salsify_fields',
+      'pattern' => 'salsify_field__',
+      'template' => 'salsify-field--html',
+    ],
+  );
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ *
+ * Adds preprocess logic for serialized Salsify data.
+ */
+function salsify_integration_preprocess_node__model(&$variables) {
+
+  // Create a few setup variables.
+  /* @var \Drupal\node\Entity\Node $entity */
+  $entity = $variables['elements']['#node'];
+  $config = \Drupal::config('salsify_integration.settings');
+  $import_method = $config->get('import_method');
+  if ($import_method == 'serialized') {
+    $field_mapping = SalsifySingleField::getFieldMappings();
+    if (isset($field_mapping['salsifysync_data'])) {
+      $field_data = unserialize($field_mapping['salsifysync_data']->data);
+      $variables['salsify_fields'] = salsify_integration_setup_field_render_arrays($field_data);
+      if (!$entity->salsifysync_data->isEmpty()) {
+        $product_data = $entity->get('salsifysync_data')->value;
+        salsify_integration_setup_value_render_arrays($variables['salsify_fields'], unserialize($product_data));
+      }
+    }
+  }
+}
+
+/**
+ * Helper function that adds the proper theme handler for each Salsify field.
+ */
+function salsify_integration_setup_field_render_arrays(array $field_data) {
+  $render_array = [];
+  foreach ($field_data as $id => $field) {
+    $field_array = [
+      'title' => [
+        '#value' => t('@title', ['@title' => $field['salsify:name']]),
+        '#attributes' => [
+          'class' => ['field-title'],
+        ],
+      ],
+      '#theme' => 'salsify_field',
+    ];
+    switch ($field['salsify:data_type']) {
+      case 'boolean':
+        $field_array['#theme'] = 'salsify_field__boolean';
+        break;
+
+      case 'html':
+
+      case 'rich_text':
+        $field_array['#theme'] = 'salsify_field__html';
+        break;
+
+      case 'link':
+        $field_array['#theme'] = 'salsify_field__link';
+        break;
+
+    }
+    $render_array[$id] = $field_array;
+  }
+  return $render_array;
+}
+
+/**
+ * Helper function that adds the field values into the provided render array.
+ */
+function salsify_integration_setup_value_render_arrays(array &$field_data, array $product_data) {
+  foreach ($field_data as $key => &$field) {
+    $field['field_value'] = [
+      '#value' => isset($product_data[$key]) ? $product_data[$key] : '',
+    ];
   }
 }

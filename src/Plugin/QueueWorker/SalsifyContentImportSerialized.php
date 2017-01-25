@@ -8,19 +8,19 @@ use Drupal\Core\Entity\Query\QueryFactory;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Queue\QueueFactory;
 use Drupal\Core\Queue\QueueWorkerBase;
-use Drupal\salsify_integration\SalsifyImportField;
+use Drupal\salsify_integration\SalsifyImportSerialized;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Provides functionality for the SalsifyContentImport Queue.
  *
  * @QueueWorker(
- *   id = "rinnai_salsify_content_import",
- *   title = @Translation("Salsify: Content Import"),
+ *   id = "rinnai_salsify_serialized_import",
+ *   title = @Translation("Salsify: Serialized Import"),
  *   cron = {"time" = 10}
  * )
  */
-class SalsifyContentImport extends QueueWorkerBase implements ContainerFactoryPluginInterface {
+class SalsifyContentImportSerialized extends QueueWorkerBase implements ContainerFactoryPluginInterface {
 
   /**
    * The configFactory interface.
@@ -94,7 +94,7 @@ class SalsifyContentImport extends QueueWorkerBase implements ContainerFactoryPl
    */
   public function processItem($data) {
     // Create a new SalsifyImport object and pass the Salsify data through.
-    $salsify_import = new SalsifyImportField($this->configFactory, $this->entityQuery, $this->entityTypeManager);
+    $salsify_import = new SalsifyImportSerialized($this->configFactory, $this->entityQuery, $this->entityTypeManager);
     $salsify_import->processSalsifyItem($data);
   }
 

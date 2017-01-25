@@ -5,12 +5,13 @@
  * The Salsify integration install file.
  */
 
+use \Drupal\Core\Database\Database;
 use \Drupal\field\Entity\FieldConfig;
 
 /**
  * Implements hook_schema().
  */
-function salsify_integration_schema() {
+function rinnai_salsify_schema() {
   $schema['salsify_field_data'] = [
     'description' => 'The table to track Salsify fields and their Drupal counterparts.',
     'fields' => [
@@ -41,6 +42,13 @@ function salsify_integration_schema() {
         'not null' => TRUE,
         'default' => '',
       ],
+      'data' => [
+        'description' => 'Additional metadata for this field mapping.',
+        'type' => 'blob',
+        'not null' => TRUE,
+        'size' => 'big',
+        'serialize' => TRUE,
+      ],
       'created' => [
         'description' => 'The timestamp the field mapping was created.',
         'type' => 'int',
@@ -55,62 +63,6 @@ function salsify_integration_schema() {
     'primary key' => ['field_id'],
   ];
 
-  $schema['salsify_import'] = [
-    'description' => 'The table to track Salsify imports.',
-    'fields' => [
-      'created' => [
-        'description' => 'The timestamp the Salsify import was created.',
-        'type' => 'int',
-        'not null' => TRUE,
-      ],
-      'completed' => [
-        'description' => 'The timestamp the Salsify import was completed.',
-        'type' => 'int',
-        'not null' => TRUE,
-      ],
-      'queue_name' => [
-        'description' => 'The name of the Drupal queue processing the import.',
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-      'status' => [
-        'description' => 'The status of the import.',
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-    ],
-    'primary key' => ['created'],
-  ];
-
-  $schema['salsify_import_log'] = [
-    'description' => 'The table to track Salsify import log data',
-    'fields' => [
-      'created' => [
-        'description' => 'The timestamp the field mapping was created.',
-        'type' => 'int',
-        'not null' => TRUE,
-      ],
-      'message' => [
-        'description' => 'The message returned by the import process.',
-        'type' => 'blob',
-        'not null' => TRUE,
-        'size' => 'big',
-      ],
-      'status' => [
-        'description' => 'The status of the import.',
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-    ],
-    'primary key' => ['created'],
-  ];
-
   return $schema;
 }
 
@@ -120,7 +72,7 @@ function salsify_integration_schema() {
  * Clean up the dynamically added fields to prevent leaving behind large
  * quantities of data that shoudn't remain in the system.
  */
-function salsify_integration_uninstall() {
+function rinnai_salsify_uninstall() {
   $config = \Drupal::config('salsify_integration.settings');
   if (!$config->get('keep_fields_on_uninstall')) {
     $content_type = $config->get('content_type');
@@ -143,4 +95,29 @@ function salsify_integration_uninstall() {
       $field->delete();
     }
   }
+}
+
+/**
+ * Add the new 'data' field onto salsify_field_data. Remove the log tables since
+ * they were never used.
+ */
+function rinnai_salsify_update_8001() {
+  $data_field_specs = array(
+    'description' => 'Additional metadata for this field mapping.',
+    'type' => 'blob',
+    'not null' => TRUE,
+    'size' => 'big',
+    'serialize' => TRUE,
+  );
+  $schema = Database::getConnection()->schema();
+  if (!$schema->fieldExists('salsify_field_data', 'data')) {
+    $schema->addField('salsify_field_data', 'data', $data_field_specs);
+  }
+  if ($schema->tableExists('salsify_import')) {
+    $schema->dropTable('salsify_import');
+  }
+  if ($schema->tableExists('salsify_import_log')) {
+    $schema->dropTable('salsify_import_log');
+  }
+  return t('Salsify database clean up complete.');
 }
