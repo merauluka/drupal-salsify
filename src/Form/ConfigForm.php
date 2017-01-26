@@ -91,16 +91,32 @@ class ConfigForm extends ConfigFormBase {
       '#group' => 'additional_settings',
     ];
 
+    // Create a description for the Import Method field. This is to note the
+    // issue with Drupal core, which at the time of this writing has issues
+    // rendering more than 64 fields on entity edit/update forms.
+    $description = '<strong>' . $this->t('Serialized:') . '</strong> '
+      . $this->t('All Salsify fields will be imported as serialized data in a single field and unserialized for display.') . '<br/>'
+      . '<strong>' . $this->t('Drupal Fields:') . '</strong> '
+      . $this->t('All Salsify fields will be imported into fields. These fields will be dynamically created on import and managed via this module.') . '<br/>';
+      . '<em><span style="color: red;">' . $this->t('Warning:') . '</span> '
+      . $this->t('With imports of 65 or more fields, editing the Salsify content type nodes will result in 500 errors.')  . '</em> ';
+
+    $form['admin_options']['import_method'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Import Method'),
+      '#description' => $description,
+      '#options' => [
+        'serialized' => $this->t('Serialized'),
+        'fields' => $this->t('Fields')
+      ],
+      '#default_value' => $config->get('import_method') ? $config->get('import_method') : 'serialized',
+      '#required' => TRUE,
+    ];
+
     $form['admin_options']['keep_fields_on_uninstall'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Leave all dynamically added fields on module uninstall.'),
       '#default_value' => $config->get('keep_fields_on_uninstall'),
-    ];
-
-    $form['import_method'] = [
-      '#type' => 'value',
-      '#value' => 'serialized',
-      '#default_value' => $config->get('import_method'),
     ];
 
     return $form;
