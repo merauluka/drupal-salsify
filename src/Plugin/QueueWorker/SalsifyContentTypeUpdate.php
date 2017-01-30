@@ -15,7 +15,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Provides functionality for the SalsifyContentTypeUpdate Queue.
  *
  * @QueueWorker(
- *   id = "rinnai_salsify_content_type_update",
+ *   id = "salsify_integration_content_type_update",
  *   title = @Translation("Salsify: Content Type Update"),
  *   cron = {"time" = 10}
  * )

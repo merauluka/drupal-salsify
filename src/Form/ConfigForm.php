@@ -16,7 +16,7 @@ class ConfigForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function getFormId() {
-    return 'rinnai_salsify_config_form';
+    return 'salsify_integration_config_form';
   }
 
   /**
@@ -97,9 +97,9 @@ class ConfigForm extends ConfigFormBase {
     $description = '<strong>' . $this->t('Serialized:') . '</strong> '
       . $this->t('All Salsify fields will be imported as serialized data in a single field and unserialized for display.') . '<br/>'
       . '<strong>' . $this->t('Drupal Fields:') . '</strong> '
-      . $this->t('All Salsify fields will be imported into fields. These fields will be dynamically created on import and managed via this module.') . '<br/>';
-      . '<em><span style="color: red;">' . $this->t('Warning:') . '</span> '
-      . $this->t('With imports of 65 or more fields, editing the Salsify content type nodes will result in 500 errors.')  . '</em> ';
+      . $this->t('All Salsify fields will be imported into fields. These fields will be dynamically created on import and managed via this module.') . '<br/>'
+      . '<em>' . $this->t('Warning:') . ' '
+      . $this->t('For imports with a large number of fields, editing the Salsify content type nodes can result performance issues and 500 errors. It is not recommended to use the "Fields" options for large data sets.')  . '</em> ';
 
     $form['admin_options']['import_method'] = [
       '#type' => 'select',
@@ -126,6 +126,8 @@ class ConfigForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
+    // If the form was submitted via the "Sync" button, then run the import
+    // process right away.
     $trigger = $form_state->getTriggeringElement();
     if ($trigger['#id'] == 'edit-salsify-start-import') {
       $container = \Drupal::getContainer();
@@ -148,11 +150,21 @@ class ConfigForm extends ConfigFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('salsify_integration.settings');
+
+    // Remove the options settings if the import method was changed from fields
+    // to serialized.
+    $new_import_method = $form_state->getValue('import_method');
+    if ($config->get('import_method') != $new_import_method && $new_import_method == 'serialized') {
+      $config_options = $this->configFactory->getEditable('salsify_integration.field_options');
+      $config_options->delete();
+    }
+    $config->set('import_method', $new_import_method);
+
     $config->set('product_feed_url', $form_state->getValue('product_feed_url'));
     $config->set('access_token', $form_state->getValue('access_token'));
     $config->set('content_type', $form_state->getValue('content_type'));
     $config->set('keep_fields_on_uninstall', $form_state->getValue('keep_fields_on_uninstall'));
-    $config->set('import_method', $form_state->getValue('import_method'));
+
     // Save the configuration.
     $config->save();
 

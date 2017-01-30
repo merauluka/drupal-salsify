@@ -59,7 +59,7 @@ class SalsifySubscriber implements EventSubscriberInterface {
 
       if ($changed && $config->get('content_type') & $config->getOriginal('content_type')) {
         /** @var QueueInterface $queue */
-        $queue = $this->queueFactory->get('rinnai_salsify_content_type_update');
+        $queue = $this->queueFactory->get('salsify_integration_content_type_update');
         $item = [
           'original' => $config->getOriginal('content_type'),
           'current' => $config->get('content_type'),

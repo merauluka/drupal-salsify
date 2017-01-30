@@ -2,6 +2,8 @@
 
 namespace Drupal\salsify_integration;
 
+use Drupal\Core\Database\DatabaseExceptionWrapper;
+use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\Query\QueryFactory;
 use Drupal\Core\TypedData\Exception\MissingDataException;
@@ -49,6 +51,13 @@ class Salsify {
   protected $entityTypeManager;
 
   /**
+   * The Entity Field Manager.
+   *
+   * @var \Drupal\Core\Entity\EntityFieldManagerInterface
+   */
+  protected $entityFieldManager;
+
+  /**
    * The logger interface.
    *
    * @var \Psr\Log\LoggerInterface
@@ -67,12 +76,13 @@ class Salsify {
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
    */
-  public function __construct(LoggerInterface $logger, ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager) {
+  public function __construct(LoggerInterface $logger, ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, EntityFieldManagerInterface $entity_field_manager) {
     $this->logger = $logger;
     $this->configFactory = $config_factory;
     $this->config = $this->configFactory->get('salsify_integration.settings');
     $this->entityQuery = $entity_query;
     $this->entityTypeManager = $entity_type_manager;
+    $this->entityFieldManager = $entity_field_manager;
   }
 
   /**
@@ -83,7 +93,8 @@ class Salsify {
       $container->get('logger.factory')->get('salsify_integration'),
       $container->get('config.factory'),
       $container->get('entity.query'),
-      $container->get('entity_type.manager')
+      $container->get('entity_type.manager'),
+      $container->get('entity_field.manager')
     );
   }
 
@@ -266,14 +277,20 @@ class Salsify {
   protected function updateDynamicField(array $salsify_field, FieldConfig $field) {}
 
   /**
-   * Utility function to remove a field mapping.
+   * Utility function to remove a Drupal field.
    *
-   * @param string $salsify_system_id
-   *   The ID of the field from Salsify.
    * @param \Drupal\field\Entity\FieldConfig $field
    *   The field configuration object from the content type.
    */
-  protected function deleteDynamicField($salsify_system_id, FieldConfig $field) {}
+  protected function deleteDynamicField(FieldConfig $field) {
+    try {
+      // Delete the field from Drupal since it is no longer in use by Salisfy.
+      $field->delete();
+    }
+    catch (DatabaseExceptionWrapper $e) {
+      $this->logger->notice('Could not delete field. Error: "%error".', ['%error' => $e->getMessage()]);
+    }
+  }
 
   /**
    * Utility function to add a field onto a node's display.

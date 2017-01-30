@@ -15,7 +15,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * Provides functionality for the SalsifyContentImport Queue.
  *
  * @QueueWorker(
- *   id = "rinnai_salsify_content_import",
+ *   id = "salsify_integration_content_import",
  *   title = @Translation("Salsify: Content Import"),
  *   cron = {"time" = 10}
  * )

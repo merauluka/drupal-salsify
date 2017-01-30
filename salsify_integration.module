@@ -22,13 +22,13 @@ function salsify_integration_midnight_import($job) {
     case 'serialized':
       $product_feed = SalsifySingleField::create($container);
       $product_feed->importProductData();
-      $logger->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
+      \Drupal::logger('salsify_integration')->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
       break;
 
     case 'fields':
       $product_feed = SalsifyMultiField::create($container);
       $product_feed->importProductData();
-      $logger->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
+      \Drupal::logger('salsify_integration')->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
       break;
   }
 }

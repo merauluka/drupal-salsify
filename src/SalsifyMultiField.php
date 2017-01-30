@@ -35,7 +35,7 @@ class SalsifyMultiField extends Salsify {
       // Sync the fields in Drupal with the fields in the Salsify feed.
       // TODO: Put this logic into a queue since it can get resource intensive.
       if ($content_type) {
-        $fields = \Drupal::service('entity_field.manager')->getFieldDefinitions('node', $content_type);
+        $fields = $this->entityFieldManager->getFieldDefinitions('node', $content_type);
         $filtered_fields = array_filter(
           $fields, function ($field_definition) {
             return $field_definition instanceof FieldConfig;
@@ -70,6 +70,7 @@ class SalsifyMultiField extends Salsify {
               'salsify_id' => $salsify_field['salsify:id'],
               'salsify_data_type' => $salsify_field['salsify:data_type'],
               'field_name' => $field_name,
+              'data' => '',
               'created' => strtotime($salsify_field['salsify:created_at']),
               'changed' => $salsify_field['date_updated'],
             ]);
@@ -92,10 +93,15 @@ class SalsifyMultiField extends Salsify {
               $field->delete();
             }
           }
-          foreach ($field_diff as $key => $field) {
-            if (strpos($key, 'salsify') == 0) {
-              $this->deleteDynamicField($field->field_id, $filtered_fields[$field_mapping[$key]->field_name]);
+          foreach ($field_diff as $salsify_field_id => $field) {
+            $diff_field_name = $field_mapping[$salsify_field_id]->field_name;
+            if (isset($filtered_fields[$diff_field_name])) {
+              $this->deleteDynamicField($filtered_fields[$diff_field_name]);
             }
+            // Remove the options listing for this field.
+            $this->removeFieldOptions($salsify_field_id);
+            // Delete the field mapping from the database.
+            $this->deleteFieldMapping('salsify_id', $salsify_field_id);
           }
         }
 
@@ -149,7 +155,7 @@ class SalsifyMultiField extends Salsify {
         else {
           /** @var \Drupal\Core\Queue\QueueInterface $queue */
           $queue = \Drupal::service('queue')
-            ->get('rinnai_salsify_content_import');
+            ->get('salsify_integration_content_import');
           foreach ($product_data['products'] as $product) {
             $queue->createItem($product);
           }
@@ -260,6 +266,7 @@ class SalsifyMultiField extends Salsify {
       'salsify_id' => $salsify_data['salsify:id'],
       'salsify_data_type' => $salsify_data['salsify:data_type'],
       'field_name' => $field_name,
+      'data' => '',
       'created' => $created,
       'changed' => $changed,
     ]);
@@ -282,23 +289,6 @@ class SalsifyMultiField extends Salsify {
     if ($salsify_field['salsify:data_type'] == 'enumerated') {
       $this->setFieldOptions($salsify_field);
     }
-  }
-
-  /**
-   * Utility function to remove a field mapping.
-   *
-   * @param string $salsify_system_id
-   *   The ID of the field from Salsify.
-   * @param \Drupal\field\Entity\FieldConfig $field
-   *   The field configuration object from the content type.
-   */
-  protected function deleteDynamicField($salsify_system_id, FieldConfig $field) {
-    // Delete the field from Drupal since it is no longer in use by Salisfy.
-    $field->delete();
-    // Remove the options listing for this field.
-    $this->removeFieldOptions($salsify_system_id);
-    // Delete the field mapping from the database.
-    $this->deleteFieldMapping('field_id', $salsify_system_id);
   }
 
   /**
@@ -343,7 +333,7 @@ class SalsifyMultiField extends Salsify {
       case 'enumerated':
         $field_settings['field_storage']['type'] = 'list_string';
         $field_settings['field_storage']['cardinality'] = -1;
-        $field_settings['field_storage']['settings']['allowed_values_function'] = 'rinnai_salsify_allowed_values_callback';
+        $field_settings['field_storage']['settings']['allowed_values_function'] = 'salsify_integration_allowed_values_callback';
         $this->setFieldOptions($salsify_data);
         break;
 

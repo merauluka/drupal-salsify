@@ -38,7 +38,8 @@ class SalsifySingleField extends Salsify {
     // Create an id and textarea field to store the Salsify ID and the
     // serialized Salsify data. Check for existence prior to creating the field.
     if ($content_type) {
-      $fields = \Drupal::service('entity_field.manager')->getFieldDefinitions('node', $content_type);
+      // Load all of the fields generated via the Field API.
+      $fields = $this->entityFieldManager->getFieldDefinitions('node', $content_type);
       $filtered_fields = array_filter(
         $fields, function ($field_definition) {
           return $field_definition instanceof FieldConfig;
@@ -87,9 +88,14 @@ class SalsifySingleField extends Salsify {
             $field->delete();
           }
         }
-        foreach ($field_diff as $key => $field) {
-          if (strpos($key, 'salsify') == 0) {
-            $this->deleteDynamicField($field->field_id, $filtered_fields[$field_mapping[$key]->field_name]);
+        foreach ($field_diff as $salsify_field_id => $field) {
+          if (strpos($salsify_field_id, 'salsify') == 0) {
+            $diff_field_name = $field_mapping[$salsify_field_id]->field_name;
+            if (isset($filtered_fields[$diff_field_name])) {
+              $this->deleteDynamicField($filtered_fields[$diff_field_name]);
+            }
+            // Delete the field mapping from the database.
+            $this->deleteFieldMapping('field_name', $salsify_field_id);
           }
         }
       }
@@ -137,7 +143,7 @@ class SalsifySingleField extends Salsify {
         else {
           /** @var \Drupal\Core\Queue\QueueInterface $queue */
           $queue = \Drupal::service('queue')
-            ->get('rinnai_salsify_serialized_import');
+            ->get('salsify_integration_serialized_import');
           foreach ($product_data['products'] as $product) {
             $queue->createItem($product);
           }
@@ -199,19 +205,6 @@ class SalsifySingleField extends Salsify {
       'changed' => time(),
     ]);
 
-  }
-
-  /**
-   * Utility function to remove a field mapping.
-   *
-   * @param string $salsify_system_id
-   *   The ID of the field from Salsify.
-   * @param \Drupal\field\Entity\FieldConfig $field
-   *   The field configuration object from the content type.
-   */
-  protected function deleteDynamicField($salsify_system_id, FieldConfig $field) {
-    // Delete the field from Drupal since it is no longer in use by Salisfy.
-    $field->delete();
   }
 
   /**

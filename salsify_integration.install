@@ -11,7 +11,7 @@ use \Drupal\field\Entity\FieldConfig;
 /**
  * Implements hook_schema().
  */
-function rinnai_salsify_schema() {
+function salsify_integration_schema() {
   $schema['salsify_field_data'] = [
     'description' => 'The table to track Salsify fields and their Drupal counterparts.',
     'fields' => [
@@ -72,7 +72,7 @@ function rinnai_salsify_schema() {
  * Clean up the dynamically added fields to prevent leaving behind large
  * quantities of data that shoudn't remain in the system.
  */
-function rinnai_salsify_uninstall() {
+function salsify_integration_uninstall() {
   $config = \Drupal::config('salsify_integration.settings');
   if (!$config->get('keep_fields_on_uninstall')) {
     $content_type = $config->get('content_type');
@@ -101,7 +101,7 @@ function rinnai_salsify_uninstall() {
  * Add the new 'data' field onto salsify_field_data. Remove the log tables since
  * they were never used.
  */
-function rinnai_salsify_update_8001() {
+function salsify_integration_update_8001() {
   $data_field_specs = array(
     'description' => 'Additional metadata for this field mapping.',
     'type' => 'blob',
