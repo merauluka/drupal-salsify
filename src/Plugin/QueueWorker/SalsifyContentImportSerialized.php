@@ -17,7 +17,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * @QueueWorker(
  *   id = "salsify_integration_serialized_import",
  *   title = @Translation("Salsify: Serialized Import"),
- *   cron = {"time" = 10}
+ *   cron = {"time" = 120}
  * )
  */
 class SalsifyContentImportSerialized extends QueueWorkerBase implements ContainerFactoryPluginInterface {
@@ -94,8 +94,8 @@ class SalsifyContentImportSerialized extends QueueWorkerBase implements Containe
    */
   public function processItem($data) {
     // Create a new SalsifyImport object and pass the Salsify data through.
-    $salsify_import = new SalsifyImportSerialized($this->configFactory, $this->entityQuery, $this->entityTypeManager);
-    $salsify_import->processSalsifyItem($data);
+    $salsify_import = SalsifyImportSerialized::create(\Drupal::getContainer());
+    $salsify_import->processSalsifyItem($data['product_data']);
   }
 
 }

@@ -5,12 +5,13 @@
  * The Salsify integration module.
  */
 
-use \Drupal\Core\Entity\EntityInterface;
-use \Drupal\Core\Entity\FieldableEntityInterface;
-use \Drupal\Core\Field\FieldStorageDefinitionInterface;
-use \Drupal\field\Entity\FieldStorageConfig;
-use \Drupal\salsify_integration\SalsifyMultiField;
-use \Drupal\salsify_integration\SalsifySingleField;
+use Drupal\Core\Entity\FieldableEntityInterface;
+use Drupal\Core\Field\FieldStorageDefinitionInterface;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
+use Drupal\salsify_integration\Salsify;
+use Drupal\salsify_integration\SalsifyMultiField;
+use Drupal\salsify_integration\SalsifySingleField;
 
 /**
  * The cron job definition to kick off the midnight Salsify import process.
@@ -22,15 +23,14 @@ function salsify_integration_midnight_import($job) {
     case 'serialized':
       $product_feed = SalsifySingleField::create($container);
       $product_feed->importProductData();
-      \Drupal::logger('salsify_integration')->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
       break;
 
     case 'fields':
       $product_feed = SalsifyMultiField::create($container);
       $product_feed->importProductData();
-      \Drupal::logger('salsify_integration')->notice('The Salsify data is queue to be imported and will be processed on the next cron run.');
       break;
   }
+  \Drupal::logger('salsify_integration')->notice('The Salsify data is queued to be imported and will be processed on the next cron run.');
 }
 
 /**
@@ -40,10 +40,12 @@ function salsify_integration_midnight_import($job) {
  */
 function salsify_integration_allowed_values_callback(FieldStorageDefinitionInterface $definition, FieldableEntityInterface $entity = NULL) {
   $options_config = \Drupal::config('salsify_integration.field_options');
-  $salsify_id = salsify_integration_get_salsify_id($definition->getName());
-  $options = $options_config->get($salsify_id[0]);
-  if ($options) {
-    return $options;
+  $salsify_id = salsify_integration_get_salsify_id($definition->getName(), $entity->getEntityTypeId(), $entity->bundle());
+  if ($salsify_id) {
+    $options = $options_config->get($salsify_id[0]);
+    if ($options) {
+      return $options;
+    }
   }
   return [];
 }
@@ -51,37 +53,77 @@ function salsify_integration_allowed_values_callback(FieldStorageDefinitionInter
 /**
  * Looks up a Drupal field's Salsify ID from the mapping table.
  */
-function salsify_integration_get_salsify_id($field_name) {
-  return \Drupal::database()->select('salsify_field_data', 'f')
-    ->fields('f', array('field_id'))
-    ->condition('field_name', $field_name, '=')
+function salsify_integration_get_salsify_id($field_name, $entity_type, $entity_bundle) {
+  $query = \Drupal::database()->select('config', 'c')
+    ->fields('c', array('data'));
+  $like_salsify_integration = $query->escapeLike('salsify_integration');
+  $like_field_name = $query->escapeLike($entity_type . '.' . $entity_bundle . '.' . $field_name);
+  $data = $query->condition('name', $like_salsify_integration . '%', 'LIKE')
+    ->condition('name', '%' . $like_field_name, 'LIKE')
     ->range(0, 1)
     ->execute()
-    ->fetchCol('field_id');
+    ->fetchCol('data');
+  if ($data) {
+    $config = unserialize($data[0]);
+    return $config['field_id'];
+  }
+  else {
+    return FALSE;
+  }
 }
 
 /**
  * Utility function to clean up Salsify data if fields are deleted from Drupal.
+ *
+ * @param \Drupal\field\Entity\FieldConfig $field
+ *   The field being deleted from the system.
  */
-function salsify_integration_field_config_delete(EntityInterface $field) {
+function salsify_integration_field_config_delete(FieldConfig $field) {
   // Get the field name and use it to look up the field_id from the mapping
   // table.
   $field_name = $field->get('field_name');
-  $field_storage = FieldStorageConfig::loadByName('node', $field_name);
+  $entity_type = $field->get('entity_type');
+  $bundle = $field->get('bundle');
+  $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
+  $container = \Drupal::getContainer();
+  $salsify = SalsifyMultiField::create($container);
 
   if ($field_storage) {
     // If the field is still set somewhere on the system, then don't remove it
     // and leave the field mapping intact.
     $bundles = $field_storage->getBundles();
 
+    // Perform the deletion logic on the Salsify data.
     if (empty($bundles)) {
-      $field_id = salsify_integration_get_salsify_id($field_name)[0];
-      $container = \Drupal::getContainer();
-      // Perform the deletion logic on the Salsify data.
-      $salsify = SalsifyMultiField::create($container);
+      $field_id = salsify_integration_get_salsify_id($field_name, $entity_type, $bundle)[0];
       $salsify->removeFieldOptions($field_id);
-      $salsify->deleteFieldMapping('field_id', $field_id);
+      $salsify->deleteFieldMapping([
+        'method' => 'manual',
+        'entity_type' => $entity_type,
+        'bundle' => $bundle,
+        'field_name' => $field_name,
+      ]);
+      $salsify->deleteFieldMapping([
+        'method' => 'dynamic',
+        'entity_type' => $entity_type,
+        'bundle' => $bundle,
+        'field_name' => $field_name,
+      ]);
     }
+  }
+  else {
+    $salsify->deleteFieldMapping([
+      'method' => 'manual',
+      'entity_type' => $entity_type,
+      'bundle' => $bundle,
+      'field_name' => $field_name,
+    ]);
+    $salsify->deleteFieldMapping([
+      'method' => 'dynamic',
+      'entity_type' => $entity_type,
+      'bundle' => $bundle,
+      'field_name' => $field_name,
+    ]);
   }
 }
 
@@ -129,9 +171,13 @@ function salsify_integration_preprocess_node__model(&$variables) {
   $config = \Drupal::config('salsify_integration.settings');
   $import_method = $config->get('import_method');
   if ($import_method == 'serialized') {
-    $field_mapping = SalsifySingleField::getFieldMappings();
+    $field_mapping = Salsify::getFieldMappings([
+      'entity_type' => 'node',
+      'bundle' => $config->get('content_type'),
+      'method' => 'dynamic',
+    ]);
     if (isset($field_mapping['salsifysync_data'])) {
-      $field_data = unserialize($field_mapping['salsifysync_data']->data);
+      $field_data = unserialize($field_mapping['salsifysync_data']['data']);
       $variables['salsify_fields'] = salsify_integration_setup_field_render_arrays($field_data);
       if (!$entity->salsifysync_data->isEmpty()) {
         $product_data = $entity->get('salsifysync_data')->value;

@@ -8,6 +8,7 @@ use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Queue\QueueFactory;
 use Drupal\Core\Queue\QueueWorkerBase;
 use Drupal\field\Entity\FieldConfig;
+use Drupal\salsify_integration\Salsify;
 use Drupal\salsify_integration\SalsifyMultiField;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -85,11 +86,14 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
     // Gather the fields from the old content type.
     $fields = $this->entityFieldManager->getFieldDefinitions('node', $original);
     // Load the field mappings for Salsify and Drupal.
-    $salsify_field_mapping = SalsifyMultiField::getFieldMappings();
+    $salsify_field_mapping = Salsify::getFieldMappings([
+      'entity_type' => 'node',
+      'bundle' => $original,
+    ]);
 
     foreach ($salsify_field_mapping as $salsify_field) {
-      if (isset($fields[$salsify_field->field_name])) {
-        $field_name = $salsify_field->field_name;
+      if (isset($fields[$salsify_field['field_name']])) {
+        $field_name = $salsify_field['field_name'];
         /* @var \Drupal\field\Entity\FieldConfig $field */
         $field = $fields[$field_name];
 
@@ -104,8 +108,20 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
         $new_field = FieldConfig::create($field_settings);
         $new_field->save();
 
+        // Update the field mappings to point to the new content type.
+        $mappings = Salsify::getFieldMappings([
+          'entity_type' => 'node',
+          'bundle' => $original,
+          'field_name' => $field->getName(),
+        ]);
+        foreach ($mappings as $mapping) {
+          Salsify::deleteFieldMapping($mapping);
+          $mapping['bundle'] = $current;
+          Salsify::createFieldMapping($mapping);
+        }
+
         // Create the form and view displays for the field.
-        SalsifyMultiField::createFieldFormDisplay($current, $field_name, $salsify_field->salsify_data_type);
+        SalsifyMultiField::createFieldFormDisplay($current, $field_name, $salsify_field['salsify_data_type']);
         foreach ($view_modes as $view_mode) {
           SalsifyMultiField::createFieldViewDisplay($current, $field_name, $view_mode);
         }

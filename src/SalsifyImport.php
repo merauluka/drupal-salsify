@@ -2,6 +2,7 @@
 
 namespace Drupal\salsify_integration;
 
+use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\Query\QueryFactory;
@@ -16,6 +17,13 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * @package Drupal\salsify_integration
  */
 class SalsifyImport {
+
+  /**
+   * The cache object associated with the specified bin.
+   *
+   * @var \Drupal\Core\Cache\CacheBackendInterface
+   */
+  protected $cache;
 
   /**
    * The configFactory interface.
@@ -54,8 +62,11 @@ class SalsifyImport {
    *   The query factory.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
+   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_salsify
+   *   The cache object associated with the Salsify bin.
    */
-  public function __construct(ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager) {
+  public function __construct(ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, CacheBackendInterface $cache_salsify) {
+    $this->cache = $cache_salsify;
     $this->configFactory = $config_factory;
     $this->config = $this->configFactory->get('salsify_integration.settings');
     $this->entityQuery = $entity_query;
@@ -69,16 +80,61 @@ class SalsifyImport {
     return new static(
       $container->get('config.factory'),
       $container->get('entity.query'),
-      $container->get('entity_type.manager')
+      $container->get('entity_type.manager'),
+      $container->get('cache.default')
     );
   }
 
   /**
    * A function to import Salsify data as nodes in Drupal.
    *
-   * @param array $salsify_data
+   * @param array $product_data
    *   The Salsify individual product data to process.
    */
-  public function processSalsifyItem(array $salsify_data) {}
+  public function processSalsifyItem(array $product_data) {}
+
+  /**
+   * Helper function to return a properly formatting set of field options.
+   *
+   * @param array $field
+   *   The field mapping database object.
+   * @param array|string $field_data
+   *   The Salsify field data from the queue.
+   *
+   * @return array|string
+   *   The options array or string values.
+   */
+  protected function getFieldOptions(array $field, $field_data) {
+    $options = $field_data;
+    switch ($field['salsify_data_type']) {
+      case 'link':
+        $options = [
+          'uri' => $field_data,
+          'title' => '',
+          'options' => [],
+        ];
+        break;
+
+      case 'date':
+        $options = [
+          'value' => $field_data,
+        ];
+        break;
+
+      case 'enumerated':
+        if (!is_array($field_data)) {
+          $options = [$field_data];
+        }
+        break;
+
+      case 'rich_text':
+        $options = [
+          'value' => $field_data,
+          'format' => 'full_html',
+        ];
+        break;
+    }
+    return $options;
+  }
 
 }

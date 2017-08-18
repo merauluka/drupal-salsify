@@ -94,8 +94,8 @@ class SalsifyContentImport extends QueueWorkerBase implements ContainerFactoryPl
    */
   public function processItem($data) {
     // Create a new SalsifyImport object and pass the Salsify data through.
-    $salsify_import = new SalsifyImportField($this->configFactory, $this->entityQuery, $this->entityTypeManager);
-    $salsify_import->processSalsifyItem($data);
+    $salsify_import = SalsifyImportField::create(\Drupal::getContainer());
+    $salsify_import->processSalsifyItem($data['product_data']);
   }
 
 }

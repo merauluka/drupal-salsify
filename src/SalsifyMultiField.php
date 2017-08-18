@@ -25,22 +25,41 @@ class SalsifyMultiField extends Salsify {
    */
   public function importProductFields() {
     try {
-      // Load the product and field data from Salsify.
-      $product_data = $this->getProductData();
-      $salsify_fields = $product_data['fields'];
-      $field_mapping = $this->getFieldMappings('salsify_id');
-      $field_diff = array_diff_key($field_mapping, $salsify_fields);
-
       $content_type = $this->getContentType();
+
       // Sync the fields in Drupal with the fields in the Salsify feed.
       // TODO: Put this logic into a queue since it can get resource intensive.
       if ($content_type) {
-        $fields = $this->entityFieldManager->getFieldDefinitions('node', $content_type);
-        $filtered_fields = array_filter(
-          $fields, function ($field_definition) {
-            return $field_definition instanceof FieldConfig;
-          }
+        // Load the product and field data from Salsify.
+        $product_data = $this->getProductData();
+
+        $field_mapping = $this->getFieldMappings(
+          [
+            'entity_type' => 'node',
+            'bundle' => $content_type,
+          ],
+          'salsify_id'
         );
+
+        // Remove the manually mapped Salsify Fields from the product data so
+        // they aren't added back into the system.
+        $manual_field_mapping = $this->getFieldMappings(
+          [
+            'entity_type' => 'node',
+            'bundle' => $content_type,
+            'method' => 'manual',
+          ],
+          'salsify_id'
+        );
+        $manual_field_names = array_keys($manual_field_mapping);
+        $salsify_fields = array_diff_key($product_data['fields'], $manual_field_names);
+
+        // Determine the dynamically mapped fields that are in the field mapping
+        // that aren't in the list of fields from Salsify.
+        $field_diff = array_diff_key($field_mapping, $salsify_fields);
+
+        // Setup the list of Drupal fields and machine names.
+        $filtered_fields = $this->getContentTypeFields($content_type);
         $field_machine_names = array_keys($filtered_fields);
 
         // Find all of the fields from Salsify that are already in the system.
@@ -48,11 +67,11 @@ class SalsifyMultiField extends Salsify {
         $salsify_intersect = array_intersect_key($salsify_fields, $field_mapping);
         foreach ($salsify_intersect as $key => $salsify_field) {
           $updated = $salsify_field['date_updated'];
-          if ($updated <> $field_mapping[$key]->changed) {
-            $this->updateFieldMapping('field_id', $salsify_field['salsify:system_id'], [
-              'changed' => $updated,
-            ]);
-            $this->updateDynamicField($salsify_field, $filtered_fields[$field_mapping[$key]->field_name]);
+          if ($updated <> $field_mapping[$key]['changed']) {
+            $updated_mapping = $field_mapping[$key];
+            $updated_mapping['changed'] = $updated;
+            $this->updateFieldMapping($updated_mapping);
+            $this->updateDynamicField($salsify_field, $filtered_fields[$field_mapping[$key]['field_name']]);
           }
         }
 
@@ -69,8 +88,11 @@ class SalsifyMultiField extends Salsify {
               'field_id' => $salsify_field['salsify:system_id'],
               'salsify_id' => $salsify_field['salsify:id'],
               'salsify_data_type' => $salsify_field['salsify:data_type'],
+              'entity_type' => 'node',
+              'bundle' => $content_type,
               'field_name' => $field_name,
-              'data' => '',
+              'data' => serialize($salsify_field),
+              'method' => 'dynamic',
               'created' => strtotime($salsify_field['salsify:created_at']),
               'changed' => $salsify_field['date_updated'],
             ]);
@@ -94,14 +116,20 @@ class SalsifyMultiField extends Salsify {
             }
           }
           foreach ($field_diff as $salsify_field_id => $field) {
-            $diff_field_name = $field_mapping[$salsify_field_id]->field_name;
+            $diff_field_name = $field_mapping[$salsify_field_id]['field_name'];
             if (isset($filtered_fields[$diff_field_name])) {
               $this->deleteDynamicField($filtered_fields[$diff_field_name]);
             }
             // Remove the options listing for this field.
             $this->removeFieldOptions($salsify_field_id);
             // Delete the field mapping from the database.
-            $this->deleteFieldMapping('salsify_id', $salsify_field_id);
+            $this->deleteFieldMapping(
+              [
+                'entity_type' => 'node',
+                'bundle' => $content_type,
+                'salsify_id' => $salsify_field_id,
+              ]
+            );
           }
         }
 
@@ -142,7 +170,7 @@ class SalsifyMultiField extends Salsify {
         // Handle cases where the user wants to perform all of the data
         // processing immediately instead of waiting for the queue to finish.
         if ($process_immediately) {
-          $salsify_import = new SalsifyImport($this->configFactory, $this->entityQuery, $this->entityTypeManager);
+          $salsify_import = SalsifyImportField::create(\Drupal::getContainer());
           foreach ($product_data['products'] as $product) {
             $salsify_import->processSalsifyItem($product);
           }
@@ -192,7 +220,7 @@ class SalsifyMultiField extends Salsify {
    * @return string
    *   Drupal field machine name.
    */
-  protected function createFieldMachineName($field_name, array &$field_machine_names) {
+  public static function createFieldMachineName($field_name, array &$field_machine_names) {
     // Differentiate between default and custom salsify fields.
     if (strpos($field_name, 'salsify:') !== FALSE) {
       $prefix = 'salsify_';
@@ -226,16 +254,26 @@ class SalsifyMultiField extends Salsify {
   /**
    * Utility function that creates a field on a node for Salsify data.
    *
+   * NOTE: Normally the Entity Type and Content Type should be managed by
+   * this module. These values currently exist to allow the creation of a field
+   * against other entities when entity reference fields are utilized.
+   *
    * @param array $salsify_data
    *   The Salsify entry for this field.
    * @param string $field_name
    *   The machine name for the Drupal field.
+   * @param string $entity_type
+   *   The entity type to create the field against. Defaults to node.
+   * @param string $content_type
+   *   The content type (bundle) to set the field against.
    */
-  protected function createDynamicField(array $salsify_data, $field_name) {
-    $content_type = $this->getContentType();
-    $field_storage = FieldStorageConfig::loadByName('node', $field_name);
-    $field_settings = $this->getFieldSettingsByType($salsify_data, $content_type, $field_name);
-    $field = FieldConfig::loadByName('node', $content_type, $field_name);
+  public function createDynamicField(array $salsify_data, $field_name, $entity_type = 'node', $content_type = '') {
+    if (!$content_type) {
+      $content_type = $this->getContentType();
+    }
+    $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
+    $field_settings = $this->getFieldSettingsByType($salsify_data, $content_type, $field_name, $entity_type);
+    $field = FieldConfig::loadByName($entity_type, $content_type, $field_name);
     $created = strtotime($salsify_data['salsify:created_at']);
     $changed = $salsify_data['date_updated'];
     if (empty($field_storage)) {
@@ -265,8 +303,11 @@ class SalsifyMultiField extends Salsify {
       'field_id' => $salsify_data['salsify:system_id'],
       'salsify_id' => $salsify_data['salsify:id'],
       'salsify_data_type' => $salsify_data['salsify:data_type'],
+      'entity_type' => $entity_type,
+      'bundle' => $content_type,
       'field_name' => $field_name,
-      'data' => '',
+      'data' => serialize($salsify_data),
+      'method' => 'dynamic',
       'created' => $created,
       'changed' => $changed,
     ]);
@@ -300,22 +341,24 @@ class SalsifyMultiField extends Salsify {
    *   The content type to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
+   * @param string $entity_type
+   *   The type of entity to use when pulling field definitions.
    *
    * @return array
    *   An array of field options for the generated field.
    */
-  protected function getFieldSettingsByType(array $salsify_data, $content_type, $field_name) {
+  protected function getFieldSettingsByType(array $salsify_data, $content_type, $field_name, $entity_type) {
     $field_settings = [
       'field' => [
         'field_name' => $field_name,
-        'entity_type' => 'node',
+        'entity_type' => $entity_type,
         'bundle' => $content_type,
         'label' => $salsify_data['salsify:name'],
       ],
       'field_storage' => [
-        'id' => 'node.' . $field_name,
+        'id' => $entity_type . '.' . $field_name,
         'field_name' => $field_name,
-        'entity_type' => 'node',
+        'entity_type' => $entity_type,
         'type' => 'string',
         'settings' => [],
         'module' => 'text',
@@ -330,6 +373,15 @@ class SalsifyMultiField extends Salsify {
 
     // Map the Salsify data types to Drupal field types and set default options.
     switch ($salsify_data['salsify:data_type']) {
+      case 'digital_asset':
+        if ($salsify_data['salsify:attribute_group'] == 'Images') {
+          $field_settings['field_storage']['type'] = 'image';
+          $field_settings['field_storage']['type'] = 'image';
+          $field_settings['field_storage']['cardinality'] = -1;
+          $field_settings['field_storage']['settings']['allowed_values_function'] = 'salsify_integration_allowed_values_callback';
+        }
+        break;
+
       case 'enumerated':
         $field_settings['field_storage']['type'] = 'list_string';
         $field_settings['field_storage']['cardinality'] = -1;
@@ -348,6 +400,10 @@ class SalsifyMultiField extends Salsify {
       case 'boolean':
         $field_settings['field_storage']['type'] = 'boolean';
         $field_settings['field_storage']['module'] = 'core';
+        $field_settings['field']['settings'] = [
+          'on_label' => 'Yes',
+          'off_label' => 'No',
+        ];
         break;
 
       case 'rich_text':
@@ -434,38 +490,7 @@ class SalsifyMultiField extends Salsify {
     }
 
     $form_storage->setComponent($field_name, $field_options)->save();
-  }
 
-  /**
-   * Utility function to set the allowed values list from Salsify for a field.
-   *
-   * @param array $salsify_data
-   *   The field level data from Salsify augmented with allowed values.
-   */
-  protected function setFieldOptions(array $salsify_data) {
-    $config = $this->configFactory->getEditable('salsify_integration.field_options');
-    $options = [];
-    if (isset($salsify_data['values'])) {
-      foreach ($salsify_data['values'] as $value) {
-        $options[$value['salsify:id']] = $value['salsify:name'];
-      }
-      $config->set($salsify_data['salsify:system_id'], $options);
-      $config->save();
-    }
-  }
-
-  /**
-   * Utility function to set the allowed values list from Salsify for a field.
-   *
-   * @param string $salsify_system_id
-   *   The Salsify system id to remove from the options configuration.
-   */
-  public function removeFieldOptions($salsify_system_id) {
-    $config = $this->configFactory->getEditable('salsify_integration.field_options');
-    if ($config->get($salsify_system_id)) {
-      $config->clear($salsify_system_id);
-      $config->save();
-    }
   }
 
 }

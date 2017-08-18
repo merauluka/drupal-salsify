@@ -5,66 +5,8 @@
  * The Salsify integration install file.
  */
 
-use \Drupal\Core\Database\Database;
-use \Drupal\field\Entity\FieldConfig;
-
-/**
- * Implements hook_schema().
- */
-function salsify_integration_schema() {
-  $schema['salsify_field_data'] = [
-    'description' => 'The table to track Salsify fields and their Drupal counterparts.',
-    'fields' => [
-      'field_id' => [
-        'description' => 'The Salsify system id used as the primary identifier for a field mapping.',
-        'type' => 'varchar',
-        'length' => 128,
-        'not null' => TRUE,
-      ],
-      'salsify_id' => [
-        'description' => 'The value of salsify:id for this field.',
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-      'salsify_data_type' => [
-        'description' => 'The value of salsify:data_type for this field.',
-        'type' => 'varchar',
-        'length' => 128,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-      'field_name' => [
-        'description' => 'The machine name of the Drupal field',
-        'type' => 'varchar',
-        'length' => 255,
-        'not null' => TRUE,
-        'default' => '',
-      ],
-      'data' => [
-        'description' => 'Additional metadata for this field mapping.',
-        'type' => 'blob',
-        'not null' => TRUE,
-        'size' => 'big',
-        'serialize' => TRUE,
-      ],
-      'created' => [
-        'description' => 'The timestamp the field mapping was created.',
-        'type' => 'int',
-        'not null' => TRUE,
-      ],
-      'changed' => [
-        'description' => 'The timestamp the field mapping was updated.',
-        'type' => 'int',
-        'not null' => TRUE,
-      ],
-    ],
-    'primary key' => ['field_id'],
-  ];
-
-  return $schema;
-}
+use Drupal\Core\Database\Database;
+use Drupal\field\Entity\FieldConfig;
 
 /**
  * Implements hook_uninstall().
@@ -75,49 +17,32 @@ function salsify_integration_schema() {
 function salsify_integration_uninstall() {
   $config = \Drupal::config('salsify_integration.settings');
   if (!$config->get('keep_fields_on_uninstall')) {
-    $content_type = $config->get('content_type');
-    $field_mapping = \Drupal::database()->select('salsify_field_data', 'f')
-      ->fields('f')
-      ->execute()
-      ->fetchAllAssoc('field_name');
+    // Load all of the affected entity fields and group them by type in order
+    // to remove the dynamic fields from the system.
+    $configs = \Drupal::configFactory()->listAll('salsify_mapping.dynamic');
+    $grouped_types = [];
+    foreach ($configs as $config_name) {
+      $config = \Drupal::config($config_name);
+      $values = $config->getRawData();
+      $grouped_types[$values['entity_type']][$values['bundle']][$values['field_name']] = $values['field_name'];
+    }
 
-    // Load the fields, filter them by the fields in the Salsify mapping table,
-    // and remove them before uninstalling the module.
-    $fields = \Drupal::service('entity_field.manager')
-      ->getFieldDefinitions('node', $content_type);
-    $filtered_fields = array_filter(
-      $fields, function ($field_definition) {
-        return $field_definition instanceof FieldConfig;
+    foreach ($grouped_types as $entity_type => $bundles) {
+      foreach ($bundles as $bundle => $bundled_fields) {
+        // Load the fields, filter them by the fields in the Salsify mapping
+        // table and remove them before uninstalling the module.
+        $fields = \Drupal::service('entity_field.manager')
+          ->getFieldDefinitions($entity_type, $bundle);
+        $filtered_fields = array_filter(
+          $fields, function ($field_definition) {
+          return $field_definition instanceof FieldConfig;
+        }
+        );
+        $salsify_fields = array_intersect_key($filtered_fields, $bundled_fields);
+        foreach ($salsify_fields as $field) {
+          $field->delete();
+        }
       }
-    );
-    $salsify_fields = array_intersect_key($filtered_fields, $field_mapping);
-    foreach ($salsify_fields as $field) {
-      $field->delete();
     }
   }
-}
-
-/**
- * Add the new 'data' field onto salsify_field_data. Remove the log tables since
- * they were never used.
- */
-function salsify_integration_update_8001() {
-  $data_field_specs = array(
-    'description' => 'Additional metadata for this field mapping.',
-    'type' => 'blob',
-    'not null' => TRUE,
-    'size' => 'big',
-    'serialize' => TRUE,
-  );
-  $schema = Database::getConnection()->schema();
-  if (!$schema->fieldExists('salsify_field_data', 'data')) {
-    $schema->addField('salsify_field_data', 'data', $data_field_specs);
-  }
-  if ($schema->tableExists('salsify_import')) {
-    $schema->dropTable('salsify_import');
-  }
-  if ($schema->tableExists('salsify_import_log')) {
-    $schema->dropTable('salsify_import_log');
-  }
-  return t('Salsify database clean up complete.');
 }

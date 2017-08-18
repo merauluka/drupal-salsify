@@ -26,34 +26,51 @@ class SalsifySingleField extends Salsify {
    * @return mixed
    *   Returns an array of product and field data or a failure message.
    */
-  protected function prepareSalsifyFields(array $product_data) {
-    $content_type = $this->getContentType();
-    $salsify_fields = [
-      'salsify_salsifyid' => t('Salsify ID'),
-      'salsifysync_data' => t('Salsify Data'),
-    ];
-    $field_mapping = $this->getFieldMappings();
-    $field_diff = array_diff_key($field_mapping, $salsify_fields);
-
+  protected function prepareSalsifyFields(array $product_data, $entity_type, $content_type) {
     // Create an id and textarea field to store the Salsify ID and the
     // serialized Salsify data. Check for existence prior to creating the field.
     if ($content_type) {
-      // Load all of the fields generated via the Field API.
-      $fields = $this->entityFieldManager->getFieldDefinitions('node', $content_type);
-      $filtered_fields = array_filter(
-        $fields, function ($field_definition) {
-          return $field_definition instanceof FieldConfig;
-        }
+
+      // Load the dynamic fields in the system from previous Salsify imports.
+      $salsify_fields = [
+        'salsify_salsifyid' => t('Salsify ID'),
+        'salsifysync_data' => t('Salsify Data'),
+        'salsify_updated' => t('Salsify Date Updated'),
+      ];
+      $field_mapping = $this->getFieldMappings(
+        [
+          'entity_type' => $entity_type,
+          'bundle' => $content_type,
+          'method' => 'dynamic',
+        ],
+        'field_name'
       );
+      $field_diff = array_diff_key($field_mapping, $salsify_fields);
+
+      // Remove the manually mapped Salsify Fields from the product data so they
+      // aren't added back into the system.
+      $manual_field_mapping = $this->getFieldMappings(
+        [
+          'entity_type' => $entity_type,
+          'bundle' => $content_type,
+          'method' => 'manual',
+        ],
+        'salsify_id'
+      );
+      $manual_field_names = array_keys($manual_field_mapping);
+      $salsify_field_data = array_diff_key($product_data['fields'], $manual_field_names);
+
+      // Load all of the fields generated via the Field API.
+      $filtered_fields = $this->getContentTypeFields($content_type);
 
       // Find all of the fields from Salsify that are already in the system and
       // update the field mapping.
       $salsify_intersect = array_intersect_key($salsify_fields, $field_mapping);
       foreach ($salsify_intersect as $salsify_field_name => $salsify_field_label) {
-        $this->updateFieldMapping('field_name', $salsify_field_name, [
-          'data' => ($salsify_field_name == 'salsifysync_data' ? serialize($product_data['fields']) : ''),
-          'changed' => time(),
-        ]);
+        $updated_record = $field_mapping[$salsify_field_name];
+        $updated_record['data'] = $salsify_field_name == 'salsifysync_data' ? serialize($salsify_field_data) : '';
+        $updated_record['changed'] = time();
+        $this->updateFieldMapping($updated_record);
       }
 
       // Create any fields that don't yet exist in the system.
@@ -66,8 +83,12 @@ class SalsifySingleField extends Salsify {
           $this->createFieldMapping([
             'field_id' => $salsify_field_name,
             'salsify_id' => $salsify_field_name,
+            'salsify_data_type' => '',
+            'entity_type' => $entity_type,
+            'bundle' => $content_type,
             'field_name' => $salsify_field_name,
-            'data' => ($salsify_field_name == 'salsifysync_data' ? serialize($product_data['fields']) : ''),
+            'data' => ($salsify_field_name == 'salsifysync_data' ? serialize($salsify_field_data) : ''),
+            'method' => 'dynamic',
             'created' => time(),
             'changed' => time(),
           ]);
@@ -78,9 +99,9 @@ class SalsifySingleField extends Salsify {
         }
       }
 
-      // Find any fields that are already in the system that weren't in the
-      // Salsify feed. This means they were deleted from Salsify and need to be
-      // deleted on the Drupal side.
+      // Find any Salsify fields that are already in the system that weren't in
+      // the Salsify feed. This means they were deleted from Salsify and need to
+      // be deleted on the Drupal side.
       if ($filtered_fields) {
         $remove_fields = array_intersect_key($filtered_fields, $field_diff);
         foreach ($remove_fields as $key => $field) {
@@ -90,20 +111,21 @@ class SalsifySingleField extends Salsify {
         }
         foreach ($field_diff as $salsify_field_id => $field) {
           if (strpos($salsify_field_id, 'salsify') == 0) {
-            $diff_field_name = $field_mapping[$salsify_field_id]->field_name;
+            $diff_field_name = $field_mapping[$salsify_field_id]['field_name'];
             if (isset($filtered_fields[$diff_field_name])) {
               $this->deleteDynamicField($filtered_fields[$diff_field_name]);
             }
             // Delete the field mapping from the database.
-            $this->deleteFieldMapping('field_name', $salsify_field_id);
+            $this->deleteFieldMapping([
+              'entity_type' => $entity_type,
+              'bundle' => $content_type,
+              'field_name' => $salsify_field_id,
+            ]);
           }
         }
       }
     }
-    else {
-      $message = t('Could not complete Salsify field data import. No content type configured.')->render();
-      $this->logger->error($message);
-    }
+
   }
 
   /**
@@ -123,39 +145,50 @@ class SalsifySingleField extends Salsify {
 
       // Verify the field exists on the chosen content type. Recreate on the fly
       // if necessary.
-      $this->prepareSalsifyFields($product_data);
+      $content_type = $this->getContentType();
+      if ($content_type) {
+        $this->prepareSalsifyFields($product_data, 'node', $content_type);
 
-      // Import the actual product data into a serialized field.
-      if (!empty($product_data['products'])) {
-        // Handle cases where the user wants to perform all of the data
-        // processing immediately instead of waiting for the queue to finish.
-        if ($process_immediately) {
-          $salsify_import = new SalsifyImportSerialized($this->configFactory, $this->entityQuery, $this->entityTypeManager);
-          foreach ($product_data['products'] as $product) {
-            $salsify_import->processSalsifyItem($product);
+        // Import the actual product data into a serialized field.
+        if (!empty($product_data['products'])) {
+          // Handle cases where the user wants to perform all of the data
+          // processing immediately instead of waiting for the queue to finish.
+          if ($process_immediately) {
+            $salsify_import = SalsifyImportSerialized::create(\Drupal::getContainer());
+            foreach ($product_data['products'] as $product) {
+              $salsify_import->processSalsifyItem($product);
+            }
+            return [
+              'status' => 'status',
+              'message' => t('The Salsify data import is complete.'),
+            ];
           }
-          return [
-            'status' => 'status',
-            'message' => t('The Salsify data import is complete.'),
-          ];
+          // Add each product value into a queue for background processing.
+          else {
+            /** @var \Drupal\Core\Queue\QueueInterface $queue */
+            $queue = \Drupal::service('queue')
+              ->get('salsify_integration_serialized_import');
+            foreach ($product_data['products'] as $product) {
+              $queue->createItem(
+                [
+                  'product_data' => $product,
+                ]
+              );
+            }
+          }
         }
-        // Add each product value into a queue for background processing.
         else {
-          /** @var \Drupal\Core\Queue\QueueInterface $queue */
-          $queue = \Drupal::service('queue')
-            ->get('salsify_integration_serialized_import');
-          foreach ($product_data['products'] as $product) {
-            $queue->createItem($product);
-          }
+          $message = t('Could not complete Salsify data import. No product data is available')->render();
+          $this->logger->error($message);
+          return [
+            'status' => 'error',
+            'message' => $message,
+          ];
         }
       }
       else {
-        $message = t('Could not complete Salsify data import. No product data is available')->render();
+        $message = t('Could not complete Salsify field data import. No content type configured.')->render();
         $this->logger->error($message);
-        return [
-          'status' => 'error',
-          'message' => $message,
-        ];
       }
     }
     catch (MissingDataException $e) {
@@ -199,8 +232,12 @@ class SalsifySingleField extends Salsify {
     $this->createFieldMapping([
       'field_id' => $field_name,
       'salsify_id' => $field_name,
+      'salsify_data_type' => '',
+      'entity_type' => 'node',
+      'bundle' => $content_type,
       'field_name' => $field_name,
       'data' => ($field_name == 'salsifysync_data' ? serialize($product_data['fields']) : ''),
+      'method' => 'dynamic',
       'created' => time(),
       'changed' => time(),
     ]);
@@ -214,6 +251,8 @@ class SalsifySingleField extends Salsify {
    *   The content type to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
+   * @param string $field_label
+   *   The string to use as the field's label.
    *
    * @return array
    *   An array of field options for the generated field.

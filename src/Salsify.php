@@ -2,6 +2,7 @@
 
 namespace Drupal\salsify_integration;
 
+use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Database\DatabaseExceptionWrapper;
 use Drupal\Core\Entity\EntityFieldManagerInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
@@ -21,6 +22,13 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * @package Drupal\salsify_integration
  */
 class Salsify {
+
+  /**
+   * The cache object associated with the specified bin.
+   *
+   * @var \Drupal\Core\Cache\CacheBackendInterface
+   */
+  protected $cache;
 
   /**
    * The configFactory interface.
@@ -75,13 +83,19 @@ class Salsify {
    *   The query factory.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
    *   The entity type manager.
+   * @param \Drupal\Core\Entity\EntityFieldManagerInterface $entity_field_manager
+   *   The entity field manager.
+   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_salsify
+   *   The cache object associated with the Salsify bin.
    */
-  public function __construct(LoggerInterface $logger, ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, EntityFieldManagerInterface $entity_field_manager) {
+  public function __construct(LoggerInterface $logger, ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, EntityFieldManagerInterface $entity_field_manager, CacheBackendInterface $cache_salsify) {
     $this->logger = $logger;
+    $this->cache = $cache_salsify;
     $this->configFactory = $config_factory;
     $this->config = $this->configFactory->get('salsify_integration.settings');
     $this->entityQuery = $entity_query;
     $this->entityTypeManager = $entity_type_manager;
+    /* TODO: This can likely be removed now that fields are loaded statically.*/
     $this->entityFieldManager = $entity_field_manager;
   }
 
@@ -94,7 +108,8 @@ class Salsify {
       $container->get('config.factory'),
       $container->get('entity.query'),
       $container->get('entity_type.manager'),
-      $container->get('entity_field.manager')
+      $container->get('entity_field.manager'),
+      $container->get('cache.default')
     );
   }
 
@@ -124,13 +139,17 @@ class Salsify {
    * @return array
    *   An array of raw, unprocessed product data. Empty if an error was found.
    */
-  protected function getRawProductData() {
+  protected function getRawData() {
     $client = new Client();
     $endpoint = $this->getUrl();
     $access_token = $this->getAccessToken();
     try {
       // Access the channel URL to fetch the newest product feed URL.
-      $generate_product_feed = $client->get($endpoint . '?access_token=' . $access_token);
+      $generate_product_feed = $client->get($endpoint, [
+        'headers' => [
+          'Authorization' => 'Bearer ' . $access_token,
+        ],
+      ]);
       $response = $generate_product_feed->getBody()->getContents();
       $response_array = Json::decode($response);
       // TODO: Should implement a check to verify that the channel has completed
@@ -159,16 +178,25 @@ class Salsify {
    * @return array
    *   An array of product data.
    */
-  protected function getProductData() {
+  public function getProductData() {
     try {
-      $raw_data = $this->getRawProductData();
+      $raw_data = $this->getRawData();
       $product_data = [];
       $field_data = &$product_data['fields'];
+
+      if (isset($raw_data['digital_assets'])) {
+        // Rekey the Digital Assets by their Salsify ID to make looking them
+        // up in later calls easier.
+        $raw_data['digital_assets'] = $this->rekeyArray($raw_data['digital_assets'], 'salsify:id');
+      }
 
       // Organize the fields and options (for enumerated fields) by salsify:id.
       foreach ($raw_data['attributes'] as $attribute) {
         $field_data[$attribute['salsify:id']] = $attribute;
         $field_data[$attribute['salsify:id']]['date_updated'] = strtotime($attribute['salsify:updated_at']);
+        foreach ($field_data[$attribute['salsify:id']]['salsify:entity_types'] as $entity_types) {
+          $product_data['entity_field_mapping'][$entity_types][] = $attribute['salsify:system_id'];
+        }
       }
       foreach ($raw_data['attribute_values'] as $value) {
         $field_data[$value['salsify:attribute_id']]['values'][$value['salsify:id']] = $value;
@@ -190,7 +218,17 @@ class Salsify {
         'date_updated' => time(),
       ];
 
-      return $product_data + $raw_data;
+      $new_product_data = $product_data + $raw_data;
+
+      // Allow users to alter the product data from Salsify by invoking
+      // hook_salsify_product_data_alter().
+      \Drupal::moduleHandler()->alter('salsify_product_data', $new_product_data);
+
+      // Add the newly updated product data into the site cache.
+      $this->cache->set('salsify_import_product_data', $new_product_data);
+
+      return $new_product_data;
+
     }
     catch (MissingDataException $e) {
       throw new MissingDataException(__CLASS__ . ': Unable to load Salsify product data. ' . $e->getMessage());
@@ -208,19 +246,61 @@ class Salsify {
   }
 
   /**
+   * Utility function to load a content types configurable fields.
+   *
+   * @param string $content_type
+   *   The content type to use for the Salsify integration.
+   * @param string $entity_type
+   *   The type of entity to use to lookup fields.
+   *
+   * @return array
+   *   An array of field objects.
+   */
+  public static function getContentTypeFields($content_type, $entity_type = 'node') {
+    $fields = \Drupal::service('entity_field.manager')->getFieldDefinitions($entity_type, $content_type);
+    $filtered_fields = array_filter(
+      $fields, function ($field_definition) {
+        return $field_definition instanceof FieldConfig;
+      }
+    );
+    return $filtered_fields;
+  }
+
+  /**
    * Utility function to return the list of Salsify field mappings.
    *
-   * @param string $key
-   *   The key in the mapping table to use for the returned associative array.
+   * @param array $keys
+   *   The keys in the mapping table to use for the returned associative array.
+   * @param string $key_by
+   *   The value to use when keying the associative array of results.
    *
    * @return mixed
-   *   An array of database row object data.
+   *   An array of configuration arrays.
    */
-  public static function getFieldMappings($key = 'field_name') {
-    return \Drupal::database()->select('salsify_field_data', 'f')
-      ->fields('f')
-      ->execute()
-      ->fetchAllAssoc($key);
+  public static function getFieldMappings(array $keys, $key_by = 'field_name') {
+    if (isset($keys['method'])) {
+      $methods = [
+        $keys['method'],
+      ];
+    }
+    else {
+      $methods = [
+        'manual',
+        'dynamic',
+      ];
+    }
+    $configs = [];
+    foreach ($methods as $method) {
+      $keys['method'] = $method;
+      $config_prefix = self::getConfigName($keys);
+      $configs += \Drupal::configFactory()->listAll($config_prefix);
+    }
+    $results = [];
+    foreach ($configs as $config_name) {
+      $config = \Drupal::config($config_name);
+      $results[$config->get($key_by)] = $config->getRawData();
+    }
+    return $results;
   }
 
   /**
@@ -229,41 +309,86 @@ class Salsify {
    * @param array $values
    *   An array of field mapping values to insert into the database.
    */
-  protected function createFieldMapping(array $values) {
-    \Drupal::database()->insert('salsify_field_data')
-      ->fields($values)
-      ->execute();
+  public static function createFieldMapping(array $values) {
+    // Allow users to alter the field mapping data by invoking
+    // hook_salsify_field_mapping_alter().
+    \Drupal::moduleHandler()->alter('salsify_field_mapping_create', $values);
+
+    if ($values) {
+      self::setConfig($values);
+    }
   }
 
   /**
-   * Utility function to create a new field mapping.
+   * Utility function to update a field mapping.
    *
-   * @param string $key
-   *   The column name to use when matching the row to update.
-   * @param string $key_value
-   *   The column value to use when matching the row to update.
    * @param array $values
    *   The values to update in the matched row.
    */
-  protected function updateFieldMapping($key, $key_value, array $values) {
-    \Drupal::database()->update('salsify_field_data')
-      ->fields($values)
-      ->condition($key, $key_value, '=')
-      ->execute();
+  public static function updateFieldMapping(array $values) {
+    // Allow users to alter the field mapping data by invoking
+    // hook_salsify_field_mapping_alter().
+    \Drupal::moduleHandler()->alter('salsify_field_mapping_update', $values);
+
+    if ($values) {
+      self::setConfig($values);
+    }
   }
 
   /**
    * Utility function to remove a field mapping.
    *
-   * @param string $key
-   *   The column name to use when matching the row to delete.
-   * @param string $key_value
-   *   The column value to use when matching the row to delete.
+   * @param array $keys
+   *   The array of column name => value settings to use when matching the row.
    */
-  public function deleteFieldMapping($key, $key_value) {
-    \Drupal::database()->delete('salsify_field_data')
-      ->condition($key, $key_value, '=')
-      ->execute();
+  public static function deleteFieldMapping(array $keys) {
+    self::deleteConfig($keys);
+  }
+
+  /**
+   * Utility function to create a config name string.
+   *
+   * @param array $values
+   *   The array of keys to use to create the config name.
+   *
+   * @return string
+   *   The config name to lookup.
+   */
+  public static function getConfigName(array $values) {
+    $field_name = '';
+    if (isset($values['field_name'])) {
+      $field_name = '.' . $values['field_name'];
+    }
+    return 'salsify_integration.' . $values['method'] . '.' . $values['entity_type'] . '.' . $values['bundle'] . $field_name;
+  }
+
+  /**
+   * Utility function to write configuration values for field mappings.
+   *
+   * @param array $values
+   *   The values to write into the configuration element.
+   */
+  public static function setConfig(array $values) {
+    $config_name = self::getConfigName($values);
+    /* @var \Drupal\Core\Config\Config $config */
+    $config = \Drupal::service('config.factory')->getEditable($config_name);
+    foreach ($values as $label => $value) {
+      $config->set($label, $value);
+    }
+    $config->save();
+  }
+
+  /**
+   * Utility function to delete configuration values for field mappings.
+   *
+   * @param array $values
+   *   The values used to lookup the  configuration element.
+   */
+  public static function deleteConfig(array $values) {
+    $config_name = self::getConfigName($values);
+    /* @var \Drupal\Core\Config\Config $config */
+    $config = \Drupal::service('config.factory')->getEditable($config_name);
+    $config->delete();
   }
 
   /**
@@ -315,5 +440,63 @@ class Salsify {
    *   The Salsify data type for this field.
    */
   public static function createFieldFormDisplay($content_type, $field_name, $salsify_type) {}
+
+  /**
+   * Utility function to set the allowed values list from Salsify for a field.
+   *
+   * @param array $salsify_data
+   *   The field level data from Salsify augmented with allowed values.
+   */
+  protected function setFieldOptions(array $salsify_data) {
+    $config = $this->configFactory->getEditable('salsify_integration.field_options');
+    $options = [];
+    if (isset($salsify_data['values'])) {
+      foreach ($salsify_data['values'] as $value) {
+        $options[$value['salsify:id']] = $value['salsify:name'];
+      }
+      $config->set($salsify_data['salsify:system_id'], $options);
+      $config->save();
+    }
+  }
+
+  /**
+   * Utility function to set the allowed values list from Salsify for a field.
+   *
+   * @param string $salsify_system_id
+   *   The Salsify system id to remove from the options configuration.
+   */
+  public function removeFieldOptions($salsify_system_id) {
+    $config = $this->configFactory->getEditable('salsify_integration.field_options');
+    if ($config->get($salsify_system_id)) {
+      $config->clear($salsify_system_id);
+      $config->save();
+    }
+  }
+
+  /**
+   * Utility function to rekey a nested array using one of its subvalues.
+   *
+   * @param array $array
+   *   An array of arrays.
+   * @param string $key
+   *   The key in the subarray to use as the key on $array.
+   *
+   * @return array|bool
+   *   The newly keyed array or FALSE if the key wasn't found.
+   */
+  public static function rekeyArray(array $array, $key) {
+    $new_array = [];
+    foreach ($array as $entry) {
+      if (is_array($entry) && isset($entry[$key])) {
+        $new_array[$entry[$key]] = $entry;
+      }
+      else {
+        break;
+      }
+    }
+
+    return (!empty($new_array) ? $new_array : FALSE);
+
+  }
 
 }

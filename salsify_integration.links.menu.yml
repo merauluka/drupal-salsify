@@ -4,3 +4,9 @@ salsify_integration.configuration:
   parent: system.admin_config_services
   description: 'Configuration to connect Drupal with Salisfy.'
   weight: 10
+salsify_integration.mapping:
+  title: 'Field Mapping'
+  route_name: salsify_integration.mapping
+  parent: salsify_integration.configuration
+  description: 'Configuration to map Drupal fields with Salsify data.'
+  weight: 10

@@ -16,5 +16,7 @@ Author: Melissa Bent (https://www.drupal.org/u/merauluka)
 ## API Required Values
 
 - Channel configured to output JSON and be updated on a regular basis.
-- User access token (found on Salsify.com under https://app.salsify.com/app/profile/edit/api)
-- The content type to map against (chosen from a select list of types on the Drupal system).
+- User access token (found on Salsify.com under
+  https://app.salsify.com/app/profile/edit/api)
+- The content type to map against (chosen from a select list of types on the
+  Drupal system).

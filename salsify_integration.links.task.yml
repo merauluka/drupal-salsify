@@ -1,0 +1,18 @@
+salsify_integration.configuration:
+  title: 'Configuration'
+  route_name: salsify_integration.configuration
+  base_route: salsify_integration.configuration
+
+salsify_integration.mapping:
+  title: 'Field Mapping'
+  route_name: salsify_integration.mapping
+  base_route: salsify_integration.configuration
+
+salsify_integration.media_mapping:
+  title: 'Media Field Mapping'
+  route_name: salsify_integration.media_mapping
+  base_route: salsify_integration.configuration
+
+salsify_integration.media_assets:
+  deriver: 'Drupal\salsify_integration\Plugin\Derivative\DynamicLocalTasks'
+  weight: 100

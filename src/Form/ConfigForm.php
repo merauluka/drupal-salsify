@@ -2,13 +2,14 @@
 
 namespace Drupal\salsify_integration\Form;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\salsify_integration\SalsifyMultiField;
 use Drupal\salsify_integration\SalsifySingleField;
 
 /**
- * Distribution Configuration form class.
+ * Salsify Configuration form class.
  */
 class ConfigForm extends ConfigFormBase {
 
@@ -63,6 +64,11 @@ class ConfigForm extends ConfigFormBase {
       '#default_value' => $config->get('content_type'),
       '#description' => $this->t('The content type to used for product mapping from Salsify.'),
       '#required' => TRUE,
+      '#cache' => [
+        'tags' => [
+          'salsify_config',
+        ],
+      ],
     ];
 
     if ($config->get('product_feed_url') && $config->get('access_token') && $config->get('content_type')) {
@@ -99,7 +105,7 @@ class ConfigForm extends ConfigFormBase {
       . '<strong>' . $this->t('Drupal Fields:') . '</strong> '
       . $this->t('All Salsify fields will be imported into fields. These fields will be dynamically created on import and managed via this module.') . '<br/>'
       . '<em>' . $this->t('Warning:') . ' '
-      . $this->t('For imports with a large number of fields, editing the Salsify content type nodes can result performance issues and 500 errors. It is not recommended to use the "Fields" options for large data sets.')  . '</em> ';
+      . $this->t('For imports with a large number of fields, editing the Salsify content type nodes can result performance issues and 500 errors. It is not recommended to use the "Fields" options for large data sets.') . '</em>';
 
     $form['admin_options']['import_method'] = [
       '#type' => 'select',
@@ -107,11 +113,35 @@ class ConfigForm extends ConfigFormBase {
       '#description' => $description,
       '#options' => [
         'serialized' => $this->t('Serialized'),
-        'fields' => $this->t('Fields')
+        'fields' => $this->t('Fields'),
       ],
       '#default_value' => $config->get('import_method') ? $config->get('import_method') : 'serialized',
       '#required' => TRUE,
     ];
+
+    $form['admin_options']['entity_reference_allow'] = [
+      '#type' => 'checkbox',
+      '#title' => $this->t('Allow mapping Salsify data to entity reference fields.'),
+      '#description' => $this->t('Note: This will require additional processing via custom code. Imports performed with this checked without any custom processing will likely fail.'),
+      '#default_value' => $config->get('entity_reference_allow'),
+    ];
+
+    if (\Drupal::moduleHandler()->moduleExists('media_entity')) {
+      $form['admin_options']['process_media_assets'] = [
+        '#type' => 'checkbox',
+        '#title' => $this->t('Process Salsify media assets into media fields.'),
+        '#description' => $this->t('Note: This will require media entities setup to match filetypes imported from Salsify. Importing will complete on a best effort basis.'),
+        '#default_value' => $config->get('process_media_assets'),
+      ];
+    }
+    else {
+      $form['admin_options']['process_media_notice'] = [
+        '#type' => 'markup',
+        '#markup' => $this->t('Enable the Media Entity module to allow importing media assets.'),
+        '#prefix' => '<p><em>',
+        '#suffix' => '</em></p>',
+      ];
+    }
 
     $form['admin_options']['keep_fields_on_uninstall'] = [
       '#type' => 'checkbox',
@@ -164,9 +194,16 @@ class ConfigForm extends ConfigFormBase {
     $config->set('access_token', $form_state->getValue('access_token'));
     $config->set('content_type', $form_state->getValue('content_type'));
     $config->set('keep_fields_on_uninstall', $form_state->getValue('keep_fields_on_uninstall'));
+    $config->set('entity_reference_allow', $form_state->getValue('entity_reference_allow'));
+    $config->set('process_media_assets', $form_state->getValue('process_media_assets'));
+    $config->set('import_method', $form_state->getValue('import_method'));
 
     // Save the configuration.
     $config->save();
+
+    // Flush the cache entries tagged with 'salsify_config' to force the API
+    // to lookup the field configurations again for the field mapping form.
+    Cache::invalidateTags(['salsify_config']);
 
     parent::submitForm($form, $form_state);
   }

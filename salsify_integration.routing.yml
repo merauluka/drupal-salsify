@@ -5,3 +5,20 @@ salsify_integration.configuration:
     _title: 'Salsify Integration'
   requirements:
     _permission: 'access salsify config page'
+
+salsify_integration.mapping:
+  path: '/admin/config/services/salsify/mapping'
+  defaults:
+    _form: 'Drupal\salsify_integration\Form\NodeMappingConfigForm'
+    _title: 'Field Mapping'
+  requirements:
+    _permission: 'access salsify config page'
+
+salsify_integration.media_mapping:
+  path: '/admin/config/services/salsify/mapping/media/{media_type}'
+  defaults:
+    _form: 'Drupal\salsify_integration\Form\MediaMappingConfigForm'
+    _title: 'Media Field Mapping'
+    media_type: 'image'
+  requirements:
+    _permission: 'access salsify config page'
