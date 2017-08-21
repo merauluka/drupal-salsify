@@ -270,13 +270,13 @@ class SalsifyMultiField extends Salsify {
    */
   public function createDynamicField(array $salsify_data, $field_name, $entity_type = '', $entity_bundle = '') {
     if (!$entity_type) {
-      $entity_bundle = $this->getEntityType();
+      $entity_type = $this->getEntityType();
     }
     if (!$entity_bundle) {
       $entity_bundle = $this->getEntityBundle();
     }
     $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
-    $field_settings = $this->getFieldSettingsByType($salsify_data, $entity_bundle, $field_name, $entity_type);
+    $field_settings = $this->getFieldSettingsByType($salsify_data, $entity_type, $entity_bundle, $field_name);
     $field = FieldConfig::loadByName($entity_type, $entity_bundle, $field_name);
     $created = strtotime($salsify_data['salsify:created_at']);
     $changed = $salsify_data['date_updated'];
@@ -297,7 +297,6 @@ class SalsifyMultiField extends Salsify {
         // Add the field to the default displays.
         /* @var \Drupal\Core\Entity\Display\EntityViewDisplayInterface $view_storage */
         $this->createFieldViewDisplay($entity_type, $entity_bundle, $field_name, 'default');
-        $this->createFieldViewDisplay($entity_type, $entity_bundle, $field_name, 'teaser');
         $this->createFieldFormDisplay($entity_type, $entity_bundle, $field_name, $salsify_data['salsify:data_type']);
       }
     }
@@ -341,17 +340,17 @@ class SalsifyMultiField extends Salsify {
    *
    * @param array $salsify_data
    *   The Salsify entry for this field.
+   * @param string $entity_type
+   *   The type of entity to use when pulling field definitions.
    * @param string $entity_bundle
    *   The content type to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
-   * @param string $entity_type
-   *   The type of entity to use when pulling field definitions.
    *
    * @return array
    *   An array of field options for the generated field.
    */
-  protected function getFieldSettingsByType(array $salsify_data, $entity_bundle, $field_name, $entity_type) {
+  protected function getFieldSettingsByType(array $salsify_data, $entity_type, $entity_bundle, $field_name) {
     $field_settings = [
       'field' => [
         'field_name' => $field_name,
@@ -366,7 +365,7 @@ class SalsifyMultiField extends Salsify {
         'type' => 'string',
         'settings' => [],
         'module' => 'text',
-        'locked' => TRUE,
+        'locked' => FALSE,
         'cardinality' => -1,
         'translatable' => TRUE,
         'indexes' => [],
@@ -484,9 +483,17 @@ class SalsifyMultiField extends Salsify {
    */
   public static function createFieldFormDisplay($entity_type, $entity_bundle, $field_name, $salsify_type) {
     /* @var \Drupal\Core\Entity\Display\EntityViewDisplayInterface $form_storage */
+    $form_storage_id = $entity_type . '.' . $entity_bundle . '.default';
     $form_storage = \Drupal::entityTypeManager()
       ->getStorage('entity_form_display')
-      ->load($entity_type . '.' . $entity_bundle . '.default');
+      ->load($form_storage_id);
+    if (!is_object($form_storage)) {
+      $form_storage = \Drupal::entityTypeManager()->getStorage('entity_form_display')
+        ->create([
+          'id' => $form_storage_id,
+        ]);
+      $form_storage->save();
+    }
     $field_options = [
       'weight' => 0,
     ];

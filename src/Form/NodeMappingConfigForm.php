@@ -36,7 +36,7 @@ class NodeMappingConfigForm extends MappingConfigForm {
       $salsify_field_mapping = Salsify::getFieldMappings(
         [
           'entity_type' => $entity_type,
-          'bundle' => $entity_bundle,
+          'entity_bundle' => $entity_bundle,
           'method' => 'manual',
         ],
         'salsify_id'

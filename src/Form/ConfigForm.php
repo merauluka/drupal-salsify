@@ -111,6 +111,8 @@ class ConfigForm extends ConfigFormBase {
     // options list.
     $event = new SalsifyGetEntityTypesEvent($entity_type_options);
     $this->eventDispatcher->dispatch(SalsifyGetEntityTypesEvent::GET_TYPES, $event);
+    // Get the updated entity type list from from the event.
+    $entity_type_options = $event->getEntityTypesList();
 
     $form['salsify_api_settings']['setup_types'] = [
       '#type' => 'container',
@@ -137,8 +139,8 @@ class ConfigForm extends ConfigFormBase {
       ],
     ];
 
-    $entity_type = $form_state->getValue('entity_type');
-    if (!empty($config->get('entity_bundle')) || !empty($entity_type)) {
+    if ($form_state->getValue('entity_type') || $config->get('entity_type')) {
+      $entity_type = $form_state->getValue('entity_type') ? $form_state->getValue('entity_type') : $config->get('entity_type');
       // Load the entity type definition to get the bundle type name.
       $entity_Type_def = $this->entityTypeManager->getDefinition($entity_type);
       $entity_bundles = $this->entityTypeManager->getStorage($entity_Type_def->getBundleEntityType())->loadMultiple();
@@ -161,7 +163,7 @@ class ConfigForm extends ConfigFormBase {
       ];
     }
 
-    if ($config->get('product_feed_url') && $config->get('access_token') && $config->get('content_type')) {
+    if ($config->get('product_feed_url') && $config->get('access_token') && $config->get('entity_bundle')) {
       $form['salsify_operations'] = [
         '#type' => 'fieldset',
         '#title' => $this->t('Operations'),
@@ -299,7 +301,7 @@ class ConfigForm extends ConfigFormBase {
     $config->set('product_feed_url', $form_state->getValue('product_feed_url'));
     $config->set('access_token', $form_state->getValue('access_token'));
     $config->set('entity_type', $form_state->getValue('entity_type'));
-    $config->set('content_type', $form_state->getValue('content_type'));
+    $config->set('entity_bundle', $form_state->getValue('entity_bundle'));
     $config->set('keep_fields_on_uninstall', $form_state->getValue('keep_fields_on_uninstall'));
     $config->set('entity_reference_allow', $form_state->getValue('entity_reference_allow'));
     $config->set('process_media_assets', $form_state->getValue('process_media_assets'));

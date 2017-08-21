@@ -4,3 +4,8 @@ services:
     arguments: ['@queue']
     tags:
       - { name: 'event_subscriber' }
+  salsify_integration.config_entity_type_update:
+    class: '\Drupal\salsify_integration\EventSubscriber\SalsifyConfigEntityTypeSubscriber'
+    arguments: ['@module_handler', '@entity_type.manager']
+    tags:
+      - { name: 'event_subscriber' }

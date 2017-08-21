@@ -36,4 +36,14 @@ class SalsifyGetEntityTypesEvent extends Event {
     return $this->entityTypesList;
   }
 
+  /**
+   * Function to set the updated entity type list.
+   *
+   * @param array $entity_types_list
+   *   The list of entities to set against the event.
+   */
+  public function setEntityTypesList(array $entity_types_list) {
+    $this->entityTypesList = $entity_types_list;
+  }
+
 }

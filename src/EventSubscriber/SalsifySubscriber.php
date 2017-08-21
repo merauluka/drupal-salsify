@@ -40,7 +40,7 @@ class SalsifySubscriber implements EventSubscriberInterface {
    * {@inheritdoc}
    */
   public static function getSubscribedEvents() {
-    $events[ConfigEvents::SAVE][] = array('checkContentTypeFields');
+    $events[ConfigEvents::SAVE][] = ['checkContentTypeFields'];
     return $events;
   }
 
