@@ -14,6 +14,13 @@ class DynamicLocalTasks extends DeriverBase {
    */
   public function getDerivativeDefinitions($base_plugin_definition) {
     if (\Drupal::moduleHandler()->moduleExists('media_entity')) {
+
+      // Build the base base for the Media Mapping fields.
+      $this->derivatives['salsify_integration.media_mapping'] = $base_plugin_definition;
+      $this->derivatives['salsify_integration.media_mapping']['title'] = t('Media Field Mapping');
+      $this->derivatives['salsify_integration.media_mapping']['route_name'] = 'salsify_integration.media_mapping';
+      $this->derivatives['salsify_integration.media_mapping']['parent_id'] = 'salsify_integration.configuration';
+
       $media_types = \Drupal::entityTypeManager()->getStorage('media_bundle')->loadMultiple();
       $count = 0;
       foreach ($media_types as $media_type => $media_config) {

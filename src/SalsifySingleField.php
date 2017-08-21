@@ -22,14 +22,18 @@ class SalsifySingleField extends Salsify {
    *
    * @var array $product_data
    *   The array of product data from Salsify.
+   * @var string $entity_type
+   *   The type of entity against which to configure fields.
+   * @var string $entity_bundle
+   *   The entity bundle to use when creating fields.
    *
    * @return mixed
    *   Returns an array of product and field data or a failure message.
    */
-  protected function prepareSalsifyFields(array $product_data, $entity_type, $content_type) {
+  protected function prepareSalsifyFields(array $product_data, $entity_type, $entity_bundle) {
     // Create an id and textarea field to store the Salsify ID and the
     // serialized Salsify data. Check for existence prior to creating the field.
-    if ($content_type) {
+    if ($entity_type && $entity_bundle) {
 
       // Load the dynamic fields in the system from previous Salsify imports.
       $salsify_fields = [
@@ -40,7 +44,7 @@ class SalsifySingleField extends Salsify {
       $field_mapping = $this->getFieldMappings(
         [
           'entity_type' => $entity_type,
-          'bundle' => $content_type,
+          'bundle' => $entity_bundle,
           'method' => 'dynamic',
         ],
         'field_name'
@@ -52,7 +56,7 @@ class SalsifySingleField extends Salsify {
       $manual_field_mapping = $this->getFieldMappings(
         [
           'entity_type' => $entity_type,
-          'bundle' => $content_type,
+          'bundle' => $entity_bundle,
           'method' => 'manual',
         ],
         'salsify_id'
@@ -61,7 +65,7 @@ class SalsifySingleField extends Salsify {
       $salsify_field_data = array_diff_key($product_data['fields'], $manual_field_names);
 
       // Load all of the fields generated via the Field API.
-      $filtered_fields = $this->getContentTypeFields($content_type);
+      $filtered_fields = $this->getContentTypeFields($entity_type, $entity_bundle);
 
       // Find all of the fields from Salsify that are already in the system and
       // update the field mapping.
@@ -85,7 +89,7 @@ class SalsifySingleField extends Salsify {
             'salsify_id' => $salsify_field_name,
             'salsify_data_type' => '',
             'entity_type' => $entity_type,
-            'bundle' => $content_type,
+            'bundle' => $entity_bundle,
             'field_name' => $salsify_field_name,
             'data' => ($salsify_field_name == 'salsifysync_data' ? serialize($salsify_field_data) : ''),
             'method' => 'dynamic',
@@ -118,7 +122,7 @@ class SalsifySingleField extends Salsify {
             // Delete the field mapping from the database.
             $this->deleteFieldMapping([
               'entity_type' => $entity_type,
-              'bundle' => $content_type,
+              'bundle' => $entity_bundle,
               'field_name' => $salsify_field_id,
             ]);
           }
@@ -145,9 +149,10 @@ class SalsifySingleField extends Salsify {
 
       // Verify the field exists on the chosen content type. Recreate on the fly
       // if necessary.
-      $content_type = $this->getContentType();
-      if ($content_type) {
-        $this->prepareSalsifyFields($product_data, 'node', $content_type);
+      $entity_type = $this->getEntityType();
+      $entity_bundle = $this->getEntityBundle();
+      if ($entity_type && $entity_bundle) {
+        $this->prepareSalsifyFields($product_data, $entity_type, $entity_bundle);
 
         // Import the actual product data into a serialized field.
         if (!empty($product_data['products'])) {
@@ -212,10 +217,11 @@ class SalsifySingleField extends Salsify {
    *   The label for the Drupal field.
    */
   protected function createDynamicField(array $product_data, $field_name, $field_label) {
-    $content_type = $this->getContentType();
-    $field_storage = FieldStorageConfig::loadByName('node', $field_name);
-    $field_settings = $this->getFieldSettingsByType($content_type, $field_name, $field_label);
-    $field = FieldConfig::loadByName('node', $content_type, $field_name);
+    $entity_type = $this->getEntityType();
+    $entity_bundle = $this->getEntityBundle();
+    $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
+    $field_settings = $this->getFieldSettingsByType($entity_type, $entity_bundle, $field_name, $field_label);
+    $field = FieldConfig::loadByName($entity_type, $entity_bundle, $field_name);
     if (empty($field_storage)) {
       $field_storage = FieldStorageConfig::create($field_settings['field_storage']);
       $field_storage->save();
@@ -233,8 +239,8 @@ class SalsifySingleField extends Salsify {
       'field_id' => $field_name,
       'salsify_id' => $field_name,
       'salsify_data_type' => '',
-      'entity_type' => 'node',
-      'bundle' => $content_type,
+      'entity_type' => $entity_type,
+      'bundle' => $entity_bundle,
       'field_name' => $field_name,
       'data' => ($field_name == 'salsifysync_data' ? serialize($product_data['fields']) : ''),
       'method' => 'dynamic',
@@ -247,8 +253,10 @@ class SalsifySingleField extends Salsify {
   /**
    * Helper function that returns Drupal field options based on a Salsify type.
    *
-   * @param string $content_type
-   *   The content type to set the field against.
+   * @param string $entity_type
+   *   The entity type to set the field against.
+   * @param string $entity_bundle
+   *   The entity bundle to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
    * @param string $field_label
@@ -257,12 +265,12 @@ class SalsifySingleField extends Salsify {
    * @return array
    *   An array of field options for the generated field.
    */
-  protected function getFieldSettingsByType($content_type, $field_name, $field_label) {
+  protected function getFieldSettingsByType($entity_type, $entity_bundle, $field_name, $field_label) {
     $field_settings = [
       'field' => [
         'field_name' => $field_name,
-        'entity_type' => 'node',
-        'bundle' => $content_type,
+        'entity_type' => $entity_type,
+        'bundle' => $entity_bundle,
         'label' => $field_label,
       ],
       'field_storage' => [

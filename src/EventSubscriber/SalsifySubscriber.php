@@ -55,14 +55,20 @@ class SalsifySubscriber implements EventSubscriberInterface {
     if ($config->getName() == 'salsify_integration.settings') {
       // Check to see if the content type was changed. If so, need to remove any
       // Salsify fields from the old content type and move them to the new.
-      $changed = $event->isChanged('content_type');
+      $changed = $event->isChanged('entity_type');
 
-      if ($changed && $config->get('content_type') && $config->getOriginal('content_type')) {
+      if ($changed && $config->get('entity_type') && $config->getOriginal('entity_type')) {
         /** @var \Drupal\Core\Queue\QueueInterface $queue */
         $queue = $this->queueFactory->get('salsify_integration_content_type_update');
         $item = [
-          'original' => $config->getOriginal('content_type'),
-          'current' => $config->get('content_type'),
+          'original' => [
+            'entity_type' => $config->getOriginal('entity_type'),
+            'entity_bundle' => $config->getOriginal('entity_bundle'),
+          ],
+          'current' => [
+            'entity_type' => $config->get('entity_type'),
+            'entity_bundle' => $config->getOriginal('entity_bundle'),
+          ],
         ];
         $queue->createItem($item);
       }

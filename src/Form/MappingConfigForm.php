@@ -86,14 +86,17 @@ class MappingConfigForm extends ConfigFormBase {
   /**
    * Utility function to filter nested array values into a single value.
    *
-   * @param array $entry
+   * @param array|string $entry
    *   The array with the 'value' element to filter.
    *
    * @return bool
    *   Whether or not the 'value' element is set on the array.
    */
-  protected function filterNestedArray(array $entry) {
-    return (bool) $entry['value'];
+  protected function filterNestedArray($entry) {
+    if (is_array($entry)) {
+      return (bool) $entry['value'];
+    }
+    return FALSE;
   }
 
   /**

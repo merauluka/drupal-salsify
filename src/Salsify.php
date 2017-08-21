@@ -206,13 +206,13 @@ class Salsify {
         }
       }
 
-      // Add in the Salisfy id from the imported content as a special field.
+      // Add in the Salsify id from the imported content as a special field.
       // This will allow for tracking data that has already been imported into
       // the system without making the user manage the ID field.
       $field_data['salsify:id'] = [
         'salsify:id' => 'salsify:id',
         'salsify:system_id' => 'salsify:system_id',
-        'salsify:name' => t('Salisfy Sync ID'),
+        'salsify:name' => t('Salsify Sync ID'),
         'salsify:data_type' => 'string',
         'salsify:created_at' => date('Y-m-d', time()),
         'date_updated' => time(),
@@ -236,28 +236,38 @@ class Salsify {
   }
 
   /**
-   * Utility function that retrieves the configured content type value.
+   * Utility function that retrieves the configured entity bundle value.
    *
    * @return string
    *   The content type to use for Salsify data.
    */
-  protected function getContentType() {
-    return $this->config->get('content_type');
+  protected function getEntityType() {
+    return $this->config->get('entity_type');
+  }
+
+  /**
+   * Utility function that retrieves the configured entity bundle value.
+   *
+   * @return string
+   *   The content type to use for Salsify data.
+   */
+  protected function getEntityBundle() {
+    return $this->config->get('entity_bundle');
   }
 
   /**
    * Utility function to load a content types configurable fields.
    *
-   * @param string $content_type
-   *   The content type to use for the Salsify integration.
    * @param string $entity_type
    *   The type of entity to use to lookup fields.
+   * @param string $entity_bundle
+   *   The entity bundle to use for the Salsify integration.
    *
    * @return array
    *   An array of field objects.
    */
-  public static function getContentTypeFields($content_type, $entity_type = 'node') {
-    $fields = \Drupal::service('entity_field.manager')->getFieldDefinitions($entity_type, $content_type);
+  public static function getContentTypeFields($entity_type, $entity_bundle) {
+    $fields = \Drupal::service('entity_field.manager')->getFieldDefinitions($entity_type, $entity_bundle);
     $filtered_fields = array_filter(
       $fields, function ($field_definition) {
         return $field_definition instanceof FieldConfig;
@@ -359,7 +369,7 @@ class Salsify {
     if (isset($values['field_name'])) {
       $field_name = '.' . $values['field_name'];
     }
-    return 'salsify_integration.' . $values['method'] . '.' . $values['entity_type'] . '.' . $values['bundle'] . $field_name;
+    return 'salsify_integration.' . $values['method'] . '.' . $values['entity_type'] . '.' . $values['entity_bundle'] . $field_name;
   }
 
   /**
@@ -420,26 +430,30 @@ class Salsify {
   /**
    * Utility function to add a field onto a node's display.
    *
-   * @param string $content_type
-   *   The content type to set the field against.
+   * @param string $entity_type
+   *   The entity type to set the field against.
+   * @param string $entity_bundle
+   *   The entity bundle to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
    * @param string $view_mode
    *   The view mode on which to add the field.
    */
-  public static function createFieldViewDisplay($content_type, $field_name, $view_mode) {}
+  public static function createFieldViewDisplay($entity_type, $entity_bundle, $field_name, $view_mode) {}
 
   /**
    * Utility function to add a field onto a node's form display.
    *
-   * @param string $content_type
-   *   The content type to set the field against.
+   * @param string $entity_type
+   *   The entity type to set the field against.
+   * @param string $entity_bundle
+   *   The entity bundle to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
    * @param string $salsify_type
    *   The Salsify data type for this field.
    */
-  public static function createFieldFormDisplay($content_type, $field_name, $salsify_type) {}
+  public static function createFieldFormDisplay($entity_type, $entity_bundle, $field_name, $salsify_type) {}
 
   /**
    * Utility function to set the allowed values list from Salsify for a field.
@@ -498,5 +512,7 @@ class Salsify {
     return (!empty($new_array) ? $new_array : FALSE);
 
   }
+
+  protected function processTaxonomyTerms() {}
 
 }

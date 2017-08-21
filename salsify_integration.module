@@ -172,8 +172,8 @@ function salsify_integration_preprocess_node__model(&$variables) {
   $import_method = $config->get('import_method');
   if ($import_method == 'serialized') {
     $field_mapping = Salsify::getFieldMappings([
-      'entity_type' => 'node',
-      'bundle' => $config->get('content_type'),
+      'entity_type' => $config->get('entity_type'),
+      'bundle' => $config->get('entity_bundle'),
       'method' => 'dynamic',
     ]);
     if (isset($field_mapping['salsifysync_data'])) {

@@ -22,7 +22,8 @@ class SalsifyImportSerialized extends SalsifyImport {
    *   The Salsify individual product data to process.
    */
   public function processSalsifyItem(array $product_data) {
-    $content_type = $this->config->get('content_type');
+    $entity_type = $this->config->get('entity_type');
+    $entity_bundle = $this->config->get('entity_bundle');
 
     // Retrieve the full Salsify product array from the cache.
     $cache_entry = $this->cache->get('salsify_import_product_data');
@@ -48,14 +49,14 @@ class SalsifyImportSerialized extends SalsifyImport {
 
     // Load the existing node or generate a new one.
     if ($results) {
-      $nid = array_values($results)[0];
-      $node = $this->entityTypeManager->getStorage('node')->load($nid);
+      $entity_id = array_values($results)[0];
+      $entity = $this->entityTypeManager->getStorage($entity_type)->load($entity_id);
       // If the model in Salsify hasn't been updated since the last time it was
       // imported, then skip it. If it was, then update salsify_updated and
       // pass it along for further processing.
       $salsify_updated = strtotime($product_data['salsify:updated_at']);
-      if ($node->salsify_updated->isEmpty() || $salsify_updated > $node->salsify_updated->value) {
-        $node->set('salsify_updated', $salsify_updated);
+      if ($entity->salsify_updated->isEmpty() || $salsify_updated > $entity->salsify_updated->value) {
+        $entity->set('salsify_updated', $salsify_updated);
       }
       else {
         return;
@@ -66,26 +67,26 @@ class SalsifyImportSerialized extends SalsifyImport {
       // Allow users to alter the title set when a node is created by invoking
       // hook_salsify_process_node_title_alter().
       \Drupal::moduleHandler()->alter('salsify_process_node_title', $title, $product_data);
-      $node = Node::create([
+      $entity = $this->entityTypeManager->getStorage($entity_type)->create([
         'title' => $title,
-        'type' => $content_type,
+        'type' => $entity_bundle,
         'created' => strtotime($product_data['salsify:created_at']),
         'changed' => strtotime($product_data['salsify:updated_at']),
         'salsify_updated' => strtotime($product_data['salsify:updated_at']),
         'salsify_salsifyid' => $product_data['salsify:id'],
         'status' => 1,
       ]);
-      $node->save();
+      $entity->save();
     }
 
     // Load the configurable fields for this content type.
-    $filtered_fields = Salsify::getContentTypeFields($node->getType());
+    $filtered_fields = Salsify::getContentTypeFields($entity_bundle, $entity_type);
 
     // Load manual field mappings keyed by Salsify ID.
     $salsify_field_mapping = SalsifyMultiField::getFieldMappings(
       [
-        'entity_type' => 'node',
-        'bundle' => $content_type,
+        'entity_type' => $entity_type,
+        'bundle' => $entity_bundle,
         'method' => 'manual',
       ],
       'salsify_id'
@@ -137,12 +138,12 @@ class SalsifyImportSerialized extends SalsifyImport {
 
     // Set the field data against the Salsify node and save the results.
     $salsify_serialized = serialize($product_data);
-    $node->set('salsifysync_data', $salsify_serialized);
+    $entity->set('salsifysync_data', $salsify_serialized);
 
     // Allow users to alter the node just before it's saved.
-    \Drupal::moduleHandler()->alter(['salsify_node_presave'], $node, $original_product_data);
+    \Drupal::moduleHandler()->alter(['salsify_node_presave'], $entity, $original_product_data);
 
-    $node->save();
+    $entity->save();
 
   }
 

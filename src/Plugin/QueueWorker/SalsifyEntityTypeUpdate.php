@@ -13,15 +13,15 @@ use Drupal\salsify_integration\SalsifyMultiField;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Provides functionality for the SalsifyContentTypeUpdate Queue.
+ * Provides functionality for the SalsifyEntityTypeUpdate Queue.
  *
  * @QueueWorker(
- *   id = "salsify_integration_content_type_update",
- *   title = @Translation("Salsify: Content Type Update"),
+ *   id = "salsify_integration_entity_type_update",
+ *   title = @Translation("Salsify: Entity Type Update"),
  *   cron = {"time" = 10}
  * )
  */
-class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFactoryPluginInterface {
+class SalsifyEntityTypeUpdate extends QueueWorkerBase implements ContainerFactoryPluginInterface {
 
   /**
    * The Entity Type Manager.
@@ -76,19 +76,21 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
    */
   public function processItem($data) {
     // Set default values.
-    $original = $data['original'];
-    $current = $data['current'];
+    $original_type = $data['original']['entity_type'];
+    $current_type = $data['current']['entity_type'];
+    $original_bundle = $data['original']['entity_bundle'];
+    $current_bundle = $data['current']['entity_bundle'];
     $view_modes = [
       'default',
       'teaser',
     ];
 
     // Gather the fields from the old content type.
-    $fields = $this->entityFieldManager->getFieldDefinitions('node', $original);
+    $fields = $this->entityFieldManager->getFieldDefinitions($original_type, $original_bundle);
     // Load the field mappings for Salsify and Drupal.
     $salsify_field_mapping = Salsify::getFieldMappings([
-      'entity_type' => 'node',
-      'bundle' => $original,
+      'entity_type' => $original_type,
+      'bundle' => $original_bundle,
     ]);
 
     foreach ($salsify_field_mapping as $salsify_field) {
@@ -100,8 +102,8 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
         // Setup the new field for the new content type and store it.
         $field_settings = [
           'field_name' => $field->getName(),
-          'entity_type' => 'node',
-          'bundle' => $current,
+          'entity_type' => $current_type,
+          'bundle' => $current_bundle,
           'label' => $field->get('label'),
         ];
         // Create the field against the given content type.
@@ -110,20 +112,20 @@ class SalsifyContentTypeUpdate extends QueueWorkerBase implements ContainerFacto
 
         // Update the field mappings to point to the new content type.
         $mappings = Salsify::getFieldMappings([
-          'entity_type' => 'node',
-          'bundle' => $original,
+          'entity_type' => $original_type,
+          'bundle' => $original_bundle,
           'field_name' => $field->getName(),
         ]);
         foreach ($mappings as $mapping) {
           Salsify::deleteFieldMapping($mapping);
-          $mapping['bundle'] = $current;
+          $mapping['bundle'] = $current_bundle;
           Salsify::createFieldMapping($mapping);
         }
 
         // Create the form and view displays for the field.
-        SalsifyMultiField::createFieldFormDisplay($current, $field_name, $salsify_field['salsify_data_type']);
+        SalsifyMultiField::createFieldFormDisplay($current_type, $current_bundle, $field_name, $salsify_field['salsify_data_type']);
         foreach ($view_modes as $view_mode) {
-          SalsifyMultiField::createFieldViewDisplay($current, $field_name, $view_mode);
+          SalsifyMultiField::createFieldViewDisplay($current_type, $current_bundle, $field_name, $view_mode);
         }
 
         // The field has been moved. Remove it from the old content type.

@@ -2,7 +2,12 @@
 
 namespace Drupal\salsify_integration;
 
-use Drupal\node\Entity\Node;
+use Drupal\Core\Cache\CacheBackendInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
+use Drupal\Core\Entity\Query\QueryFactory;
+use Drupal\Core\Extension\ModuleHandlerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Class SalsifyImportField.
@@ -16,13 +21,50 @@ use Drupal\node\Entity\Node;
 class SalsifyImportField extends SalsifyImport {
 
   /**
+   * The module handler interface.
+   *
+   * @var \Drupal\Core\Extension\ModuleHandlerInterface
+   */
+  private $moduleHandler;
+
+  /**
+   * SalsifyImportField constructor.
+   *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The config factory.
+   * @param \Drupal\Core\Entity\Query\QueryFactory $entity_query
+   *   The entity query interface.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager interface.
+   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_salsify
+   *   The Salsify cache interface.
+   * @param \Drupal\Core\Extension\ModuleHandler $module_handler
+   *   The module handler interface.
+   */
+  public function __construct(ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, CacheBackendInterface $cache_salsify, ModuleHandlerInterface $module_handler) {
+    parent::__construct($config_factory, $entity_query, $entity_type_manager, $cache_salsify);
+    $this->moduleHandler = $module_handler;
+  }
+
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('config.factory'),
+      $container->get('entity.query'),
+      $container->get('entity_type.manager'),
+      $container->get('cache.default'),
+      $container->get('module_handler')
+    );
+  }
+
+  /**
    * A function to import Salsify data as nodes in Drupal.
    *
    * @param array $product_data
    *   The Salsify individual product data to process.
    */
   public function processSalsifyItem(array $product_data) {
-    $content_type = $this->config->get('content_type');
+    $entity_type = $this->config->get('entity_type');
+    $entity_bundle = $this->config->get('entity_bundle');
 
     // Store this to send through to hook_salsify_node_presave_alter().
     $original_product_data = $product_data;
@@ -30,40 +72,41 @@ class SalsifyImportField extends SalsifyImport {
     // Load field mappings keyed by Salsify ID.
     $salsify_field_mapping = SalsifyMultiField::getFieldMappings(
       [
-        'entity_type' => 'node',
-        'bundle' => $content_type,
+        'entity_type' => $entity_type,
+        'bundle' => $entity_bundle,
       ],
       'salsify_id'
     );
 
     // Lookup any existing nodes in order to overwrite their contents.
-    $results = $this->entityQuery->get('node')
+    $results = $this->entityQuery->get($entity_type)
       ->condition('salsify_salsifyid', $product_data['salsify:id'])
       ->execute();
 
     // Load the existing node or generate a new one.
     if ($results) {
-      $nid = array_values($results)[0];
-      $node = $this->entityTypeManager->getStorage('node')->load($nid);
+      $entity_id = array_values($results)[0];
+      $entity = $this->entityTypeManager->getStorage($entity_type)->load($entity_id);
     }
     else {
-      $title = $product_data['salisfy:id'];
-      // Allow users to alter the title set when  node is created by invoking
+      $title = $product_data['salsify:id'];
+      // Allow users to alter the title set when a node is created by invoking
       // hook_salsify_process_node_title_alter().
-      \Drupal::moduleHandler()->alter('salsify_process_node_title', $title, $product_data);
-      $node = Node::create([
+      $this->moduleHandler->alter('salsify_process_node_title', $title, $product_data);
+      $entity = $this->entityTypeManager->getStorage($entity_type)->create([
         'title' => $title,
-        'type' => $content_type,
+        'type' => $entity_bundle,
         'created' => strtotime($product_data['salsify:created_at']),
         'changed' => strtotime($product_data['salsify:updated_at']),
         'salsify_salsifyid' => $product_data['salsify:id'],
         'status' => 1,
       ]);
-      $node->save();
+      $entity->getTypedData();
+      $entity->save();
     }
 
     // Load the configurable fields for this content type.
-    $filtered_fields = Salsify::getContentTypeFields($node->getType());
+    $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
 
     // Set the field data against the Salsify node. Remove the data from the
     // serialized list to prevent redundancy.
@@ -75,10 +118,10 @@ class SalsifyImportField extends SalsifyImport {
 
         // Run all digital assets through additional processing as media
         // entities.
-        if (\Drupal::moduleHandler()->moduleExists('media_entity')) {
+        if ($this->moduleHandler->moduleExists('media_entity')) {
           if ($field['salsify_data_type'] == 'digital_asset') {
             if (!isset($media_import)) {
-              $media_import = new SalsifyImportMedia($this->configFactory, $this->entityQuery, $this->entityTypeManager);
+              $media_import = SalsifyImportMedia::create(\Drupal::getContainer());
             }
             /* @var \Drupal\media_entity\Entity\Media $media */
             $media_entities = $media_import->processSalsifyMediaItem($field, $product_data);
@@ -103,21 +146,31 @@ class SalsifyImportField extends SalsifyImport {
           $context = [
             'field_config' => $field_config,
             'product_data' => $product_data,
-            'salsify_data' => $salsify_data,
             'field_map' => $field,
           ];
 
-          \Drupal::moduleHandler()->alter($hooks, $options, $context);
-          $node->set($field['field_name'], $options);
+          $this->moduleHandler->alter($hooks, $options, $context);
+
+          // Truncate strings if they are too long for the string field they
+          // are mapped against.
+          if ($field_config->getType() == 'string') {
+            $field_storage = $field_config->getFieldStorageDefinition();
+            $max_length = $field_storage->getSetting('max_length');
+            if (strlen($options) > $max_length) {
+              $options = substr($options, 0, $max_length);
+            }
+          }
+
+          $entity->set($field['field_name'], $options);
           unset($product_data[$field['salsify_id']]);
         }
       }
     }
 
     // Allow users to alter the node just before it's saved.
-    \Drupal::moduleHandler()->alter(['salsify_node_presave'], $node, $original_product_data);
+    $this->moduleHandler->alter(['salsify_entity_presave'], $entity, $original_product_data);
 
-    $node->save();
+    $entity->save();
   }
 
 }

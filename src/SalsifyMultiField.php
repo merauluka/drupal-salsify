@@ -25,18 +25,19 @@ class SalsifyMultiField extends Salsify {
    */
   public function importProductFields() {
     try {
-      $content_type = $this->getContentType();
+      $entity_type = $this->getEntityType();
+      $entity_bundle = $this->getEntityBundle();
 
       // Sync the fields in Drupal with the fields in the Salsify feed.
       // TODO: Put this logic into a queue since it can get resource intensive.
-      if ($content_type) {
+      if ($entity_type && $entity_bundle) {
         // Load the product and field data from Salsify.
         $product_data = $this->getProductData();
 
         $field_mapping = $this->getFieldMappings(
           [
-            'entity_type' => 'node',
-            'bundle' => $content_type,
+            'entity_type' => $entity_type,
+            'bundle' => $entity_bundle,
           ],
           'salsify_id'
         );
@@ -45,8 +46,8 @@ class SalsifyMultiField extends Salsify {
         // they aren't added back into the system.
         $manual_field_mapping = $this->getFieldMappings(
           [
-            'entity_type' => 'node',
-            'bundle' => $content_type,
+            'entity_type' => $entity_type,
+            'bundle' => $entity_bundle,
             'method' => 'manual',
           ],
           'salsify_id'
@@ -59,7 +60,7 @@ class SalsifyMultiField extends Salsify {
         $field_diff = array_diff_key($field_mapping, $salsify_fields);
 
         // Setup the list of Drupal fields and machine names.
-        $filtered_fields = $this->getContentTypeFields($content_type);
+        $filtered_fields = $this->getContentTypeFields($entity_type, $entity_bundle);
         $field_machine_names = array_keys($filtered_fields);
 
         // Find all of the fields from Salsify that are already in the system.
@@ -88,8 +89,8 @@ class SalsifyMultiField extends Salsify {
               'field_id' => $salsify_field['salsify:system_id'],
               'salsify_id' => $salsify_field['salsify:id'],
               'salsify_data_type' => $salsify_field['salsify:data_type'],
-              'entity_type' => 'node',
-              'bundle' => $content_type,
+              'entity_type' => $entity_type,
+              'bundle' => $entity_bundle,
               'field_name' => $field_name,
               'data' => serialize($salsify_field),
               'method' => 'dynamic',
@@ -125,8 +126,8 @@ class SalsifyMultiField extends Salsify {
             // Delete the field mapping from the database.
             $this->deleteFieldMapping(
               [
-                'entity_type' => 'node',
-                'bundle' => $content_type,
+                'entity_type' => $entity_type,
+                'bundle' => $entity_bundle,
                 'salsify_id' => $salsify_field_id,
               ]
             );
@@ -264,16 +265,19 @@ class SalsifyMultiField extends Salsify {
    *   The machine name for the Drupal field.
    * @param string $entity_type
    *   The entity type to create the field against. Defaults to node.
-   * @param string $content_type
-   *   The content type (bundle) to set the field against.
+   * @param string $entity_bundle
+   *   The entity bundle to set the field against.
    */
-  public function createDynamicField(array $salsify_data, $field_name, $entity_type = 'node', $content_type = '') {
-    if (!$content_type) {
-      $content_type = $this->getContentType();
+  public function createDynamicField(array $salsify_data, $field_name, $entity_type = '', $entity_bundle = '') {
+    if (!$entity_type) {
+      $entity_bundle = $this->getEntityType();
+    }
+    if (!$entity_bundle) {
+      $entity_bundle = $this->getEntityBundle();
     }
     $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
-    $field_settings = $this->getFieldSettingsByType($salsify_data, $content_type, $field_name, $entity_type);
-    $field = FieldConfig::loadByName($entity_type, $content_type, $field_name);
+    $field_settings = $this->getFieldSettingsByType($salsify_data, $entity_bundle, $field_name, $entity_type);
+    $field = FieldConfig::loadByName($entity_type, $entity_bundle, $field_name);
     $created = strtotime($salsify_data['salsify:created_at']);
     $changed = $salsify_data['date_updated'];
     if (empty($field_storage)) {
@@ -292,9 +296,9 @@ class SalsifyMultiField extends Salsify {
       if (strpos($field_name, 'salsifysync_') !== FALSE) {
         // Add the field to the default displays.
         /* @var \Drupal\Core\Entity\Display\EntityViewDisplayInterface $view_storage */
-        $this->createFieldViewDisplay($content_type, $field_name, 'default');
-        $this->createFieldViewDisplay($content_type, $field_name, 'teaser');
-        $this->createFieldFormDisplay($content_type, $field_name, $salsify_data['salsify:data_type']);
+        $this->createFieldViewDisplay($entity_type, $entity_bundle, $field_name, 'default');
+        $this->createFieldViewDisplay($entity_type, $entity_bundle, $field_name, 'teaser');
+        $this->createFieldFormDisplay($entity_type, $entity_bundle, $field_name, $salsify_data['salsify:data_type']);
       }
     }
 
@@ -304,7 +308,7 @@ class SalsifyMultiField extends Salsify {
       'salsify_id' => $salsify_data['salsify:id'],
       'salsify_data_type' => $salsify_data['salsify:data_type'],
       'entity_type' => $entity_type,
-      'bundle' => $content_type,
+      'bundle' => $entity_bundle,
       'field_name' => $field_name,
       'data' => serialize($salsify_data),
       'method' => 'dynamic',
@@ -337,7 +341,7 @@ class SalsifyMultiField extends Salsify {
    *
    * @param array $salsify_data
    *   The Salsify entry for this field.
-   * @param string $content_type
+   * @param string $entity_bundle
    *   The content type to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
@@ -347,12 +351,12 @@ class SalsifyMultiField extends Salsify {
    * @return array
    *   An array of field options for the generated field.
    */
-  protected function getFieldSettingsByType(array $salsify_data, $content_type, $field_name, $entity_type) {
+  protected function getFieldSettingsByType(array $salsify_data, $entity_bundle, $field_name, $entity_type) {
     $field_settings = [
       'field' => [
         'field_name' => $field_name,
         'entity_type' => $entity_type,
-        'bundle' => $content_type,
+        'bundle' => $entity_bundle,
         'label' => $salsify_data['salsify:name'],
       ],
       'field_storage' => [
@@ -362,7 +366,7 @@ class SalsifyMultiField extends Salsify {
         'type' => 'string',
         'settings' => [],
         'module' => 'text',
-        'locked' => FALSE,
+        'locked' => TRUE,
         'cardinality' => -1,
         'translatable' => TRUE,
         'indexes' => [],
@@ -375,7 +379,6 @@ class SalsifyMultiField extends Salsify {
     switch ($salsify_data['salsify:data_type']) {
       case 'digital_asset':
         if ($salsify_data['salsify:attribute_group'] == 'Images') {
-          $field_settings['field_storage']['type'] = 'image';
           $field_settings['field_storage']['type'] = 'image';
           $field_settings['field_storage']['cardinality'] = -1;
           $field_settings['field_storage']['settings']['allowed_values_function'] = 'salsify_integration_allowed_values_callback';
@@ -433,24 +436,26 @@ class SalsifyMultiField extends Salsify {
   /**
    * Utility function to add a field onto a node's display.
    *
-   * @param string $content_type
-   *   The content type to set the field against.
+   * @param string $entity_type
+   *   The entity type to set the field against.
+   * @param string $entity_bundle
+   *   The entity bundle to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
    * @param string $view_mode
    *   The view mode on which to add the field.
    */
-  public static function createFieldViewDisplay($content_type, $field_name, $view_mode) {
+  public static function createFieldViewDisplay($entity_type, $entity_bundle, $field_name, $view_mode) {
     /* @var \Drupal\Core\Entity\Display\EntityViewDisplayInterface $view_storage */
     $view_storage = \Drupal::entityTypeManager()
       ->getStorage('entity_view_display')
-      ->load('node.' . $content_type . '.' . $view_mode);
+      ->load($entity_type . '.' . $entity_bundle . '.' . $view_mode);
 
     // If the node display doesn't exist, create it in order to set the field.
     if (empty($view_storage)) {
       $values = [
-        'targetEntityType' => 'node',
-        'bundle' => $content_type,
+        'targetEntityType' => $entity_type,
+        'bundle' => $entity_bundle,
         'mode' => $view_mode,
         'status' => TRUE,
       ];
@@ -468,18 +473,20 @@ class SalsifyMultiField extends Salsify {
   /**
    * Utility function to add a field onto a node's form display.
    *
-   * @param string $content_type
-   *   The content type to set the field against.
+   * @param string $entity_type
+   *   The entity type to set the field against.
+   * @param string $entity_bundle
+   *   The entity bundle to set the field against.
    * @param string $field_name
    *   The machine name for the Drupal field.
    * @param string $salsify_type
    *   The Salsify data type for this field.
    */
-  public static function createFieldFormDisplay($content_type, $field_name, $salsify_type) {
+  public static function createFieldFormDisplay($entity_type, $entity_bundle, $field_name, $salsify_type) {
     /* @var \Drupal\Core\Entity\Display\EntityViewDisplayInterface $form_storage */
     $form_storage = \Drupal::entityTypeManager()
       ->getStorage('entity_form_display')
-      ->load('node.' . $content_type . '.default');
+      ->load($entity_type . '.' . $entity_bundle . '.default');
     $field_options = [
       'weight' => 0,
     ];

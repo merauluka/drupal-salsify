@@ -2,16 +2,64 @@
 
 namespace Drupal\salsify_integration\Form;
 
+use Drupal\Component\EventDispatcher\ContainerAwareEventDispatcher;
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\ReplaceCommand;
 use Drupal\Core\Cache\Cache;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\salsify_integration\Event\SalsifyGetEntityTypesEvent;
 use Drupal\salsify_integration\SalsifyMultiField;
 use Drupal\salsify_integration\SalsifySingleField;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Salsify Configuration form class.
  */
 class ConfigForm extends ConfigFormBase {
+
+  /**
+   * The entity type manager interface.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
+
+  /**
+   * The event dispatcher service.
+   *
+   * @var \Drupal\Component\EventDispatcher\ContainerAwareEventDispatcher
+   */
+  protected $eventDispatcher;
+
+  /**
+   * ConfigForm constructor.
+   *
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The configuration factory.
+   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
+   *   The entity type manager interface.
+   * @param \Drupal\Component\EventDispatcher\ContainerAwareEventDispatcher $event_dispatcher
+   *   The event dispatcher service.
+   */
+  public function __construct(ConfigFactoryInterface $config_factory, EntityTypeManagerInterface $entity_type_manager, ContainerAwareEventDispatcher $event_dispatcher) {
+    parent::__construct($config_factory);
+    $this->entityTypeManager = $entity_type_manager;
+    $this->eventDispatcher = $event_dispatcher;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('config.factory'),
+      $container->get('entity_type.manager'),
+      $container->get('event_dispatcher')
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -52,24 +100,66 @@ class ConfigForm extends ConfigFormBase {
       '#required' => TRUE,
     ];
 
-    $content_types = \Drupal::entityTypeManager()->getStorage('node_type')->loadMultiple();
-    $content_types_options = [];
-    foreach ($content_types as $content_type) {
-      $content_types_options[$content_type->id()] = $content_type->label();
-    }
-    $form['salsify_api_settings']['content_type'] = [
+    // By default, this module will support the core node and taxonomy term
+    // entities. More can be added by subscribing to the provided event.
+    $entity_type_options = [
+      'node' => $this->t('Node'),
+      'taxonomy_term' => $this->t('Taxonomy Term'),
+    ];
+
+    // Dispatch the event to allow other modules to add on to the content
+    // options list.
+    $event = new SalsifyGetEntityTypesEvent($entity_type_options);
+    $this->eventDispatcher->dispatch(SalsifyGetEntityTypesEvent::GET_TYPES, $event);
+
+    $form['salsify_api_settings']['setup_types'] = [
+      '#type' => 'container',
+      '#prefix' => '<div class="salsify-config-entity-types">',
+      '#suffix' => '</div>',
+    ];
+
+    $form['salsify_api_settings']['setup_types']['entity_type'] = [
       '#type' => 'select',
-      '#title' => $this->t('Drupal Content Type'),
-      '#options' => $content_types_options,
-      '#default_value' => $config->get('content_type'),
-      '#description' => $this->t('The content type to used for product mapping from Salsify.'),
+      '#title' => $this->t('Select an entity type'),
+      '#options' => $entity_type_options,
+      '#default_value' => $config->get('entity_type'),
+      '#description' => $this->t('The entity type to use for product mapping from Salsify.'),
       '#required' => TRUE,
+      '#ajax' => [
+        'callback' => '::loadEntityBundles',
+        'trigger' => 'change',
+        'wrapper' => 'salsify-config-entity-types',
+      ],
       '#cache' => [
         'tags' => [
           'salsify_config',
         ],
       ],
     ];
+
+    $entity_type = $form_state->getValue('entity_type');
+    if (!empty($config->get('entity_bundle')) || !empty($entity_type)) {
+      // Load the entity type definition to get the bundle type name.
+      $entity_Type_def = $this->entityTypeManager->getDefinition($entity_type);
+      $entity_bundles = $this->entityTypeManager->getStorage($entity_Type_def->getBundleEntityType())->loadMultiple();
+      $entity_bundles_options = [];
+      foreach ($entity_bundles as $entity_bundle) {
+        $entity_bundles_options[$entity_bundle->id()] = $entity_bundle->label();
+      }
+      $form['salsify_api_settings']['setup_types']['entity_bundle'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Select a bundle'),
+        '#options' => $entity_bundles_options,
+        '#default_value' => $config->get('entity_bundle'),
+        '#description' => $this->t('The bundle to use for product mapping from Salsify.'),
+        '#required' => TRUE,
+        '#cache' => [
+          'tags' => [
+            'salsify_config',
+          ],
+        ],
+      ];
+    }
 
     if ($config->get('product_feed_url') && $config->get('access_token') && $config->get('content_type')) {
       $form['salsify_operations'] = [
@@ -153,6 +243,22 @@ class ConfigForm extends ConfigFormBase {
   }
 
   /**
+   * Handler for ajax reload of entity bundles.
+   *
+   * @param array $form
+   *   The config form.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The submitted values from the config form.
+   */
+  public function loadEntityBundles(array &$form, FormStateInterface $form_state) {
+    $values = $form_state->getValues();
+    $response = new AjaxResponse();
+    // Add the command to update the form elements.
+    $response->addCommand(new ReplaceCommand('.salsify-config-entity-types', $form['salsify_api_settings']['setup_types']));
+    return $response;
+  }
+
+  /**
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
@@ -192,6 +298,7 @@ class ConfigForm extends ConfigFormBase {
 
     $config->set('product_feed_url', $form_state->getValue('product_feed_url'));
     $config->set('access_token', $form_state->getValue('access_token'));
+    $config->set('entity_type', $form_state->getValue('entity_type'));
     $config->set('content_type', $form_state->getValue('content_type'));
     $config->set('keep_fields_on_uninstall', $form_state->getValue('keep_fields_on_uninstall'));
     $config->set('entity_reference_allow', $form_state->getValue('entity_reference_allow'));

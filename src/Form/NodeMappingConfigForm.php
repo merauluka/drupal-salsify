@@ -23,19 +23,20 @@ class NodeMappingConfigForm extends MappingConfigForm {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildForm($form, $form_state);
     $config = $this->config('salsify_integration.settings');
-    $content_type = $config->get('content_type');
-    $form_state->setTemporaryValue('salsify_entity_type', 'node');
-    $form_state->setTemporaryValue('salsify_bundle', $content_type);
+    $entity_type = $config->get('entity_type');
+    $entity_bundle = $config->get('entity_bundle');
+    $form_state->setTemporaryValue('salsify_entity_type', $entity_type);
+    $form_state->setTemporaryValue('salsify_entity_bundle', $entity_bundle);
     $cache_keys = [
       'salsify_config',
     ];
 
-    if (isset($content_type)) {
+    if (isset($entity_type) && isset($entity_bundle)) {
       // Load manual field mappings keyed by Salsify ID.
       $salsify_field_mapping = Salsify::getFieldMappings(
         [
-          'entity_type' => 'node',
-          'bundle' => $content_type,
+          'entity_type' => $entity_type,
+          'bundle' => $entity_bundle,
           'method' => 'manual',
         ],
         'salsify_id'
@@ -56,7 +57,7 @@ class NodeMappingConfigForm extends MappingConfigForm {
       ];
 
       // Gather all of the configured fields on the configured content type.
-      $filtered_fields = Salsify::getContentTypeFields($content_type);
+      $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
 
       $cache_entry = $this->cache->get('salsify_field_data');
       if ($cache_entry) {
