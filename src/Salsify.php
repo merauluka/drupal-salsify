@@ -217,6 +217,14 @@ class Salsify {
         'salsify:created_at' => date('Y-m-d', time()),
         'date_updated' => time(),
       ];
+      $field_data['salsify:updated_at'] = [
+        'salsify:id' => 'salsify:updated_at',
+        'salsify:system_id' => 'salsify:system_id',
+        'salsify:name' => t('Salsify Updated Date'),
+        'salsify:data_type' => 'number',
+        'salsify:created_at' => date('Y-m-d', time()),
+        'date_updated' => time(),
+      ];
 
       $new_product_data = $product_data + $raw_data;
 
@@ -466,7 +474,10 @@ class Salsify {
     $options = [];
     if (isset($salsify_data['values'])) {
       foreach ($salsify_data['values'] as $value) {
-        $options[$value['salsify:id']] = $value['salsify:name'];
+        // Filter out everything but alphanumeric characters, dashes, and spaces
+        // to prevent errors when setting the field options.
+        $salsify_id = preg_replace('/[^\w-\s]/', '', $value['salsify:id']);
+        $options[$salsify_id] = $value['salsify:name'];
       }
       $config->set($salsify_data['salsify:system_id'], $options);
       $config->save();

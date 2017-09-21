@@ -9,7 +9,7 @@ use Drupal\Core\Queue\QueueFactory;
 use Drupal\Core\Queue\QueueWorkerBase;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\salsify_integration\Salsify;
-use Drupal\salsify_integration\SalsifyMultiField;
+use Drupal\salsify_integration\SalsifyFields;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -123,9 +123,9 @@ class SalsifyEntityTypeUpdate extends QueueWorkerBase implements ContainerFactor
         }
 
         // Create the form and view displays for the field.
-        SalsifyMultiField::createFieldFormDisplay($current_type, $current_bundle, $field_name, $salsify_field['salsify_data_type']);
+        SalsifyFields::createFieldFormDisplay($current_type, $current_bundle, $field_name, $salsify_field['salsify_data_type']);
         foreach ($view_modes as $view_mode) {
-          SalsifyMultiField::createFieldViewDisplay($current_type, $current_bundle, $field_name, $view_mode);
+          SalsifyFields::createFieldViewDisplay($current_type, $current_bundle, $field_name, $view_mode);
         }
 
         // The field has been moved. Remove it from the old content type.

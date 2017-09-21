@@ -11,7 +11,7 @@ use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\salsify_integration\Event\SalsifyGetEntityTypesEvent;
-use Drupal\salsify_integration\SalsifyMultiField;
+use Drupal\salsify_integration\SalsifyFields;
 use Drupal\salsify_integration\SalsifySingleField;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -77,7 +77,7 @@ class ConfigForm extends ConfigFormBase {
 
     $form['salsify_api_settings'] = [
       '#type' => 'fieldset',
-      '#title' => $this->t('Salisfy API Settings'),
+      '#title' => $this->t('Salsify API Settings'),
       '#collapsible' => TRUE,
       '#group' => 'salsify_api_settings_group',
     ];
@@ -87,7 +87,7 @@ class ConfigForm extends ConfigFormBase {
       '#size' => 75,
       '#title' => $this->t('Salsify Product Feed'),
       '#default_value' => $config->get('product_feed_url'),
-      '#description' => $this->t('The link to the product feed from a Salsify channel. For details on channels in Salisfy, see <a href="@url" target="_blank">Salsify\'s documentation</a>', array('@url' => 'https://help.salsify.com/help/getting-started-with-channels')),
+      '#description' => $this->t('The link to the product feed from a Salsify channel. For details on channels in Salsify, see <a href="@url" target="_blank">Salsify\'s documentation</a>', array('@url' => 'https://help.salsify.com/help/getting-started-with-channels')),
       '#required' => TRUE,
     ];
 
@@ -178,7 +178,7 @@ class ConfigForm extends ConfigFormBase {
       ];
       $form['salsify_operations']['salsify_import_reminder'] = [
         '#type' => 'markup',
-        '#markup' => '<p><strong>' . $this->t('Not seeing your changes from Salsify?') . '</strong><br/>' . $this->t('If you just made a change, your product channel will need to be updated to reflect the change. For details on channels in Salisfy, see <a href="@url" target="_blank">Salsify\'s documentation.</a >', ['@url' => 'https://help.salsify.com/help/getting-started-with-channels']) . '</p>',
+        '#markup' => '<p><strong>' . $this->t('Not seeing your changes from Salsify?') . '</strong><br/>' . $this->t('If you just made a change, your product channel will need to be updated to reflect the change. For details on channels in Salsify, see <a href="@url" target="_blank">Salsify\'s documentation.</a >', ['@url' => 'https://help.salsify.com/help/getting-started-with-channels']) . '</p>',
       ];
     }
 
@@ -192,22 +192,22 @@ class ConfigForm extends ConfigFormBase {
     // Create a description for the Import Method field. This is to note the
     // issue with Drupal core, which at the time of this writing has issues
     // rendering more than 64 fields on entity edit/update forms.
-    $description = '<strong>' . $this->t('Serialized:') . '</strong> '
-      . $this->t('All Salsify fields will be imported as serialized data in a single field and unserialized for display.') . '<br/>'
-      . '<strong>' . $this->t('Drupal Fields:') . '</strong> '
-      . $this->t('All Salsify fields will be imported into fields. These fields will be dynamically created on import and managed via this module.') . '<br/>'
+    $description = '<strong>' . $this->t('Manual Mapping Only:') . '</strong> '
+      . $this->t('Only Salsify fields that have been mapped to existing Drupal fields will have their values imported.') . '<br/>'
+      . '<strong>' . $this->t('Hybrid Manual/Dynamic Mapping:') . '</strong> '
+      . $this->t('All Salsify fields will be imported into fields. Any existing field mappings will be honored and preserved. Any fields not manually mapped will be dynamically created on import and managed via this module.') . '<br/>'
       . '<em>' . $this->t('Warning:') . ' '
-      . $this->t('For imports with a large number of fields, editing the Salsify content type nodes can result performance issues and 500 errors. It is not recommended to use the "Fields" options for large data sets.') . '</em>';
+      . $this->t('For imports with a large number of fields, editing the Salsify entities can result performance issues and 500 errors. It is not recommended to use the "Hybrid" option for data sets with a large number of fields.') . '</em>';
 
     $form['admin_options']['import_method'] = [
       '#type' => 'select',
       '#title' => $this->t('Import Method'),
       '#description' => $description,
       '#options' => [
-        'serialized' => $this->t('Serialized'),
-        'fields' => $this->t('Fields'),
+        'manual' => $this->t('Manual Mapping Only'),
+        'dynamic' => $this->t('Hybrid Manual/Dynamic Mapping'),
       ],
-      '#default_value' => $config->get('import_method') ? $config->get('import_method') : 'serialized',
+      '#default_value' => $config->get('import_method') ? $config->get('import_method') : 'manual',
       '#required' => TRUE,
     ];
 
@@ -273,7 +273,7 @@ class ConfigForm extends ConfigFormBase {
         $product_feed = SalsifySingleField::create($container);
       }
       else {
-        $product_feed = SalsifyMultiField::create($container);
+        $product_feed = SalsifyFields::create($container);
       }
       $results = $product_feed->importProductData(TRUE);
       if ($results) {

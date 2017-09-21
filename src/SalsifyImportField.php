@@ -70,7 +70,7 @@ class SalsifyImportField extends SalsifyImport {
     $original_product_data = $product_data;
 
     // Load field mappings keyed by Salsify ID.
-    $salsify_field_mapping = SalsifyMultiField::getFieldMappings(
+    $salsify_field_mapping = SalsifyFields::getFieldMappings(
       [
         'entity_type' => $entity_type,
         'bundle' => $entity_bundle,
@@ -87,6 +87,16 @@ class SalsifyImportField extends SalsifyImport {
     if ($results) {
       $entity_id = array_values($results)[0];
       $entity = $this->entityTypeManager->getStorage($entity_type)->load($entity_id);
+      // If the model in Salsify hasn't been updated since the last time it was
+      // imported, then skip it. If it was, then update salsify_updated and
+      // pass it along for further processing.
+      $salsify_updated = strtotime($product_data['salsify:updated_at']);
+      if ($entity->salsify_updated->isEmpty() || $salsify_updated > $entity->salsify_updated->value) {
+        $entity->set('salsify_updated', $salsify_updated);
+      }
+      else {
+        return;
+      }
     }
     else {
       $title = $product_data['salsify:id'];
@@ -98,6 +108,7 @@ class SalsifyImportField extends SalsifyImport {
         'type' => $entity_bundle,
         'created' => strtotime($product_data['salsify:created_at']),
         'changed' => strtotime($product_data['salsify:updated_at']),
+        'salsify_updated' => strtotime($product_data['salsify:updated_at']),
         'salsify_salsifyid' => $product_data['salsify:id'],
         'status' => 1,
       ]);
@@ -107,6 +118,9 @@ class SalsifyImportField extends SalsifyImport {
 
     // Load the configurable fields for this content type.
     $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
+    // Unset the system values since they've already been processed.
+    unset($filtered_fields['salsify_updated']);
+    unset($filtered_fields['salsify_salsifyid']);
 
     // Set the field data against the Salsify node. Remove the data from the
     // serialized list to prevent redundancy.
@@ -117,7 +131,7 @@ class SalsifyImportField extends SalsifyImport {
         $field_config = $filtered_fields[$field['field_name']];
 
         // Run all digital assets through additional processing as media
-        // entities.
+        // entities if the Media entity module is enabled.
         if ($this->moduleHandler->moduleExists('media_entity')) {
           if ($field['salsify_data_type'] == 'digital_asset') {
             if (!isset($media_import)) {

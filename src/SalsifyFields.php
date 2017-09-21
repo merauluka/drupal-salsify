@@ -11,7 +11,7 @@ use Drupal\field\Entity\FieldStorageConfig;
  *
  * @package Drupal\salsify_integration
  */
-class SalsifyMultiField extends Salsify {
+class SalsifyFields extends Salsify {
 
   /**
    * The main Salsify product field import function.
@@ -25,19 +25,20 @@ class SalsifyMultiField extends Salsify {
    */
   public function importProductFields() {
     try {
+      $import_method = $this->config->get('import_method');
       $entity_type = $this->getEntityType();
       $entity_bundle = $this->getEntityBundle();
 
       // Sync the fields in Drupal with the fields in the Salsify feed.
       // TODO: Put this logic into a queue since it can get resource intensive.
-      if ($entity_type && $entity_bundle) {
+      if ($import_method == 'dynamic' && $entity_type && $entity_bundle) {
         // Load the product and field data from Salsify.
         $product_data = $this->getProductData();
 
         $field_mapping = $this->getFieldMappings(
           [
             'entity_type' => $entity_type,
-            'bundle' => $entity_bundle,
+            'entity_bundle' => $entity_bundle,
           ],
           'salsify_id'
         );
@@ -47,7 +48,7 @@ class SalsifyMultiField extends Salsify {
         $manual_field_mapping = $this->getFieldMappings(
           [
             'entity_type' => $entity_type,
-            'bundle' => $entity_bundle,
+            'entity_bundle' => $entity_bundle,
             'method' => 'manual',
           ],
           'salsify_id'
@@ -92,7 +93,6 @@ class SalsifyMultiField extends Salsify {
               'entity_type' => $entity_type,
               'bundle' => $entity_bundle,
               'field_name' => $field_name,
-              'data' => serialize($salsify_field),
               'method' => 'dynamic',
               'created' => strtotime($salsify_field['salsify:created_at']),
               'changed' => $salsify_field['date_updated'],
@@ -230,6 +230,12 @@ class SalsifyMultiField extends Salsify {
       $prefix = 'salsifysync_';
     }
 
+    // Override the default field name for the updated_at field to match what
+    // is used in the single field mapping class.
+    if ($field_name == 'salsify:updated_at') {
+      $field_name = 'updated';
+    }
+
     // Clean the string to remove spaces.
     $field_name = str_replace('-', '_', $field_name);
     $field_name = preg_replace('/[^A-Za-z0-9\-]/', '', $field_name);
@@ -309,7 +315,6 @@ class SalsifyMultiField extends Salsify {
       'entity_type' => $entity_type,
       'bundle' => $entity_bundle,
       'field_name' => $field_name,
-      'data' => serialize($salsify_data),
       'method' => 'dynamic',
       'created' => $created,
       'changed' => $changed,
@@ -427,6 +432,16 @@ class SalsifyMultiField extends Salsify {
         ];
         break;
 
+      case 'number':
+        $field_settings['field_storage']['type'] = 'integer';
+        $field_settings['field_storage']['module'] = 'core';
+        $field_settings['field_storage']['settings'] = [
+          'unsigned' => 0,
+          'size' => 'normal',
+        ];
+        $field_settings['field']['field_type'] = 'integer';
+        break;
+
     }
 
     return $field_settings;
@@ -491,6 +506,11 @@ class SalsifyMultiField extends Salsify {
       $form_storage = \Drupal::entityTypeManager()->getStorage('entity_form_display')
         ->create([
           'id' => $form_storage_id,
+          'bundle' => $entity_bundle,
+          'targetEntityType' => $entity_type,
+          'displayContext' => 'form',
+          'mode' => 'default',
+          'status' => TRUE,
         ]);
       $form_storage->save();
     }
@@ -498,7 +518,7 @@ class SalsifyMultiField extends Salsify {
       'weight' => 0,
     ];
 
-    // Set form widget for multi-value options to checkboxes.
+    // Set the default form widget for multi-value options to checkboxes.
     if ($salsify_type == 'enumerated') {
       $field_options['type'] = 'options_buttons';
     }

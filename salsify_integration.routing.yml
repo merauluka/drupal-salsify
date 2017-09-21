@@ -9,7 +9,7 @@ salsify_integration.configuration:
 salsify_integration.mapping:
   path: '/admin/config/services/salsify/mapping'
   defaults:
-    _form: 'Drupal\salsify_integration\Form\NodeMappingConfigForm'
+    _form: 'Drupal\salsify_integration\Form\EntityMappingConfigForm'
     _title: 'Field Mapping'
   requirements:
     _permission: 'access salsify config page'

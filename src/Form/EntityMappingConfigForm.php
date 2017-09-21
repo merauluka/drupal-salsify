@@ -8,7 +8,7 @@ use Drupal\salsify_integration\Salsify;
 /**
  * Distribution Configuration form class.
  */
-class NodeMappingConfigForm extends MappingConfigForm {
+class EntityMappingConfigForm extends MappingConfigForm {
 
   /**
    * {@inheritdoc}
@@ -25,10 +25,13 @@ class NodeMappingConfigForm extends MappingConfigForm {
     $config = $this->config('salsify_integration.settings');
     $entity_type = $config->get('entity_type');
     $entity_bundle = $config->get('entity_bundle');
-    $form_state->setTemporaryValue('salsify_entity_type', $entity_type);
-    $form_state->setTemporaryValue('salsify_entity_bundle', $entity_bundle);
-    $cache_keys = [
-      'salsify_config',
+    $form['salsify_entity_type'] = [
+      '#type' => 'value',
+      '#value' => $entity_type,
+    ];
+    $form['salsify_entity_bundle'] = [
+      '#type' => 'value',
+      '#value' => $entity_bundle,
     ];
 
     if (isset($entity_type) && isset($entity_bundle)) {
@@ -59,18 +62,9 @@ class NodeMappingConfigForm extends MappingConfigForm {
       // Gather all of the configured fields on the configured content type.
       $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
 
-      $cache_entry = $this->cache->get('salsify_field_data');
-      if ($cache_entry) {
-        $salsify_data = $cache_entry->data;
-      }
-      else {
-        $salsify = Salsify::create($this->container);
-        $salsify_data = $salsify->getProductData();
-        $cache_expiry = time() + 15 * 60 * 60;
-        $this->cacheItem('salsify_field_data', $salsify_data, $cache_expiry, $cache_keys);
-      }
-      $salsify_fields = $salsify_data['fields'];
-      $form_state->setTemporaryValue('salsify_field_data', $salsify_fields);
+      // Load the Salsify data array.
+      $this->loadSalsifyData();
+      $salsify_fields = $this->salsifyData['fields'];
 
       $field_types = $this->getFieldsByType($filtered_fields);
       $incompatible = [];

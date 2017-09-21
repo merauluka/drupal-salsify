@@ -2,7 +2,7 @@ salsify_integration.configuration:
   title: 'Salsify'
   route_name: salsify_integration.configuration
   parent: system.admin_config_services
-  description: 'Configuration to connect Drupal with Salisfy.'
+  description: 'Configuration to connect Drupal with Salsify.'
   weight: 10
 salsify_integration.mapping:
   title: 'Field Mapping'

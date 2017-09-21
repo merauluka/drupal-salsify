@@ -218,12 +218,12 @@ class SalsifyImportMedia {
               $salsify_id_field = [
                 'salsify:id' => 'salsify:id',
                 'salsify:system_id' => 'salsify:id',
-                'salsify:name' => t('Salisfy Sync ID'),
+                'salsify:name' => t('Salsify Sync ID'),
                 'salsify:data_type' => 'string',
                 'salsify:created_at' => date('Y-m-d', time()),
                 'date_updated' => time(),
               ];
-              $salsify = SalsifyMultiField::create(\Drupal::getContainer());
+              $salsify = SalsifyFields::create(\Drupal::getContainer());
               $salsify->createDynamicField($salsify_id_field, $field_name, 'media', $bundle);
             }
 

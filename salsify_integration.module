@@ -9,27 +9,14 @@ use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\field\Entity\FieldStorageConfig;
-use Drupal\salsify_integration\Salsify;
-use Drupal\salsify_integration\SalsifyMultiField;
-use Drupal\salsify_integration\SalsifySingleField;
+use Drupal\salsify_integration\SalsifyFields;
 
 /**
  * The cron job definition to kick off the midnight Salsify import process.
  */
 function salsify_integration_midnight_import($job) {
-  $container = \Drupal::getContainer();
-  $config = \Drupal::config('salsify_integration.settings');
-  switch ($config->get('import_method')) {
-    case 'serialized':
-      $product_feed = SalsifySingleField::create($container);
-      $product_feed->importProductData();
-      break;
-
-    case 'fields':
-      $product_feed = SalsifyMultiField::create($container);
-      $product_feed->importProductData();
-      break;
-  }
+  $product_feed = SalsifyFields::create(\Drupal::getContainer());
+  $product_feed->importProductData();
   \Drupal::logger('salsify_integration')->notice('The Salsify data is queued to be imported and will be processed on the next cron run.');
 }
 
@@ -86,7 +73,7 @@ function salsify_integration_field_config_delete(FieldConfig $field) {
   $bundle = $field->get('bundle');
   $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
   $container = \Drupal::getContainer();
-  $salsify = SalsifyMultiField::create($container);
+  $salsify = SalsifyFields::create($container);
 
   if ($field_storage) {
     // If the field is still set somewhere on the system, then don't remove it
@@ -156,35 +143,6 @@ function salsify_integration_theme() {
       'template' => 'salsify-field--html',
     ],
   );
-}
-
-/**
- * Implements hook_preprocess_HOOK().
- *
- * Adds preprocess logic for serialized Salsify data.
- */
-function salsify_integration_preprocess_node__model(&$variables) {
-
-  // Create a few setup variables.
-  /* @var \Drupal\node\Entity\Node $entity */
-  $entity = $variables['elements']['#node'];
-  $config = \Drupal::config('salsify_integration.settings');
-  $import_method = $config->get('import_method');
-  if ($import_method == 'serialized') {
-    $field_mapping = Salsify::getFieldMappings([
-      'entity_type' => $config->get('entity_type'),
-      'bundle' => $config->get('entity_bundle'),
-      'method' => 'dynamic',
-    ]);
-    if (isset($field_mapping['salsifysync_data'])) {
-      $field_data = unserialize($field_mapping['salsifysync_data']['data']);
-      $variables['salsify_fields'] = salsify_integration_setup_field_render_arrays($field_data);
-      if (!$entity->salsifysync_data->isEmpty()) {
-        $product_data = $entity->get('salsifysync_data')->value;
-        salsify_integration_setup_value_render_arrays($variables['salsify_fields'], unserialize($product_data));
-      }
-    }
-  }
 }
 
 /**

@@ -22,21 +22,23 @@ class MediaMappingConfigForm extends MappingConfigForm {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildForm($form, $form_state);
-    $entity_type = 'media';
     $request = $this->getRequest();
-    $bundle = $request->attributes->get('media_type');
-    $form_state->setTemporaryValue('salsify_entity_type', $entity_type);
-    $form_state->setTemporaryValue('salsify_bundle', $bundle);
-    $cache_keys = [
-      'salsify_config',
+    $entity_type = 'media';
+    $entity_bundle = $request->attributes->get('media_type');
+    $form['salsify_entity_type'] = [
+      '#type' => 'value',
+      '#value' => $entity_type,
     ];
-
-    if (isset($bundle)) {
+    $form['salsify_entity_bundle'] = [
+      '#type' => 'value',
+      '#value' => $entity_bundle,
+    ];
+    if (isset($entity_bundle)) {
       // Load manual field mappings keyed by Salsify ID.
       $salsify_field_mapping = Salsify::getFieldMappings(
         [
           'entity_type' => $entity_type,
-          'bundle' => $bundle,
+          'entity_bundle' => $entity_bundle,
           'method' => 'manual',
         ],
         'salsify_id'
@@ -57,50 +59,11 @@ class MediaMappingConfigForm extends MappingConfigForm {
       ];
 
       // Gather all of the configured fields on the requested entity.
-      $filtered_fields = Salsify::getContentTypeFields($bundle, $entity_type);
-
-      $cache_entry = $this->cache->get('salsify_field_data');
-      if ($cache_entry) {
-        $salsify_data = $cache_entry->data;
-      }
-      else {
-        $salsify = Salsify::create($this->container);
-        $salsify_data = $salsify->getProductData();
-        $cache_expiry = time() + 15 * 60 * 60;
-        $this->cacheItem('salsify_field_data', $salsify_data, $cache_expiry, $cache_keys);
-      }
-      $salsify_field_map = $salsify_data['entity_field_mapping'];
-      $salsify_fields = [];
-
-      // First allow the user to map any fields that aren't system values
-      // in Salsify.
-      if (isset($salsify_field_map['digital_assets'])) {
-        // Filter out all fields that aren't set against media assets.
-        $media_fields = $salsify_field_map['digital_assets'];
-        $salsify_fields = $salsify_data['fields'];
-        foreach ($salsify_fields as $key => $salsify_field) {
-          if (!in_array($salsify_field['salsify:system_id'], $media_fields)) {
-            unset($salsify_fields[$key]);
-          }
-        }
-      }
-
-      // Augment the custom fields with system data.
-      $salsify_fields['salsify:url'] = [
-        'salsify:system_id' => 'salsify_media_asset_id',
-        'salsify:id' => 'salsify_media_asset_id',
-        'salsify:name' => $this->t('Salsify File')->render(),
-        'salsify:data_type' => 'digital_asset',
-        'salsify:created_at' => date('Y-m-d', time()),
-        'date_updated' => time(),
-      ];
-
-      $form_state->setTemporaryValue('salsify_field_data', $salsify_fields);
-
+      $filtered_fields = Salsify::getContentTypeFields($entity_bundle, $entity_type);
       $field_types = $this->getFieldsByType($filtered_fields);
       $incompatible = [];
 
-      foreach ($salsify_fields as $key => $salsify_field) {
+      foreach ($this->salsifyData['fields'] as $key => $salsify_field) {
         $form['salsify_field_mapping'][$key]['label'] = [
           '#type' => 'markup',
           '#markup' => '<strong>' . $salsify_field['salsify:name'] . '</strong> (' . $this->t('data_type:') . ' ' . $salsify_field['salsify:data_type'] . ')',
@@ -140,6 +103,41 @@ class MediaMappingConfigForm extends MappingConfigForm {
     }
 
     return $form;
+  }
+
+
+  /**
+   * Utility function to load or refresh the array of Salsify data.
+   */
+  protected function loadSalsifyData() {
+    parent::loadSalsifyData();
+    $salsify_field_map = $this->salsifyData['entity_field_mapping'];
+    $salsify_fields = [];
+
+    // Allow the user to map any fields that aren't system values in Salsify.
+    if (isset($salsify_field_map['digital_assets'])) {
+      // Filter out all fields that aren't set against media assets.
+      $media_fields = $salsify_field_map['digital_assets'];
+      $salsify_fields = $this->salsifyData['fields'];
+      foreach ($salsify_fields as $key => $salsify_field) {
+        if (!in_array($salsify_field['salsify:system_id'], $media_fields)) {
+          unset($salsify_fields[$key]);
+        }
+      }
+    }
+
+    // Augment the custom fields with system data.
+    $salsify_fields['salsify:url'] = [
+      'salsify:system_id' => 'salsify_media_asset_id',
+      'salsify:id' => 'salsify_media_asset_id',
+      'salsify:name' => $this->t('Salsify File')->render(),
+      'salsify:data_type' => 'digital_asset',
+      'salsify:created_at' => date('Y-m-d', time()),
+      'date_updated' => time(),
+    ];
+
+    $this->salsifyData['fields'] = $salsify_fields;
+
   }
 
 }

@@ -39,6 +39,13 @@ class MappingConfigForm extends ConfigFormBase {
   protected $cache;
 
   /**
+   * The array of formatted Salsify data.
+   *
+   * @var array
+   */
+  protected $salsifyData;
+
+  /**
    * Constructs a \Drupal\system\ConfigFormBase object.
    *
    * @param \Symfony\Component\DependencyInjection\ContainerInterface $container
@@ -121,25 +128,24 @@ class MappingConfigForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $config = $this->config('salsify_integration.settings');
-    $entity_type = $form_state->getTemporaryValue('salsify_entity_type');
-    $bundle = $form_state->getTemporaryValue('salsify_bundle');
+    $entity_type = $form_state->getValue('salsify_entity_type');
+    $entity_bundle = $form_state->getValue('salsify_entity_bundle');
 
     // Setup the Salsify field data that was passed from the mapping form.
-    $salsify_fields = $form_state->getTemporaryValue('salsify_field_data');
+    $salsify_fields = $this->salsifyData['fields'];
 
     // Get the Salsify field mappings that already exist in the system.
     $drupal_field_mapping = Salsify::getFieldMappings(
       [
         'entity_type' => $entity_type,
-        'bundle' => $bundle,
+        'entity_bundle' => $entity_bundle,
         'method' => 'manual',
       ]
     );
     $salsify_field_id_mapping = Salsify::getFieldMappings(
       [
         'entity_type' => $entity_type,
-        'bundle' => $bundle,
+        'entity_bundle' => $entity_bundle,
         'method' => 'manual',
       ],
       'field_id'
@@ -156,7 +162,7 @@ class MappingConfigForm extends ConfigFormBase {
         'salsify_id' => $salsify_id,
         'salsify_data_type' => $salsify_field['salsify:data_type'],
         'entity_type' => $entity_type,
-        'bundle' => $bundle,
+        'entity_bundle' => $entity_bundle,
         'field_name' => $field_map['value'],
         'data' => serialize($salsify_field),
         'method' => 'manual',
@@ -172,13 +178,13 @@ class MappingConfigForm extends ConfigFormBase {
         // to preserve user-created fields.
         if ($salsify_id_map['field_name'] != $field_map['value']) {
           if ($salsify_id_map['method'] == 'dynamic') {
-            $field = FieldConfig::loadByName($entity_type, $bundle, $field_map['value']);
+            $field = FieldConfig::loadByName($entity_type, $entity_bundle, $field_map['value']);
             $field->delete();
           }
           else {
             Salsify::deleteFieldMapping([
               'entity_type' => $entity_type,
-              'bundle' => $bundle,
+              'entity_bundle' => $entity_bundle,
               'method' => 'manual',
               'field_name' => $salsify_id_map['field_name'],
             ]);
@@ -194,19 +200,19 @@ class MappingConfigForm extends ConfigFormBase {
         // order to preserve user-created fields.
         if ($drupal_field_map['field_id'] != $salsify_field['salsify:system_id']) {
           if ($drupal_field_map['method'] == 'dynamic') {
-            $field = FieldConfig::loadByName($entity_type, $bundle, $field_map['value']);
+            $field = FieldConfig::loadByName($entity_type, $entity_bundle, $field_map['value']);
             $field->delete();
           }
           else {
             Salsify::deleteFieldMapping([
               'entity_type' => $entity_type,
-              'bundle' => $bundle,
+              'entity_bundle' => $entity_bundle,
               'method' => 'manual',
               'field_name' => $field_map['value'],
             ]);
             Salsify::deleteFieldMapping([
               'entity_type' => $entity_type,
-              'bundle' => $bundle,
+              'entity_bundle' => $entity_bundle,
               'method' => 'dynamic',
               'field_name' => $field_map['value'],
             ]);
@@ -240,7 +246,7 @@ class MappingConfigForm extends ConfigFormBase {
       if ($field_name_map['method'] == 'manual') {
         Salsify::deleteFieldMapping([
           'entity_type' => $field_name_map['entity_type'],
-          'bundle' => $field_name_map['bundle'],
+          'entity_bundle' => $field_name_map['entity_bundle'],
           'method' => 'manual',
           'field_name' => $field_name_map['field_name'],
         ]);
@@ -360,6 +366,25 @@ class MappingConfigForm extends ConfigFormBase {
     }
 
     return $fields_by_type;
+  }
+
+  /**
+   * Utility function to load or refresh the array of Salsify data.
+   */
+  protected function loadSalsifyData() {
+    $cache_entry = $this->cache->get('salsify_field_data');
+    $cache_keys = [
+      'salsify_config',
+    ];
+    if ($cache_entry) {
+      $this->salsifyData = $cache_entry->data;
+    }
+    else {
+      $salsify = Salsify::create($this->container);
+      $this->salsifyData = $salsify->getProductData();
+      $cache_expiry = time() + 15 * 60 * 60;
+      $this->cacheItem('salsify_field_data', $this->salsifyData, $cache_expiry, $cache_keys);
+    }
   }
 
   /**
