@@ -138,14 +138,14 @@ class MappingConfigForm extends ConfigFormBase {
     $drupal_field_mapping = Salsify::getFieldMappings(
       [
         'entity_type' => $entity_type,
-        'entity_bundle' => $entity_bundle,
+        'bundle' => $entity_bundle,
         'method' => 'manual',
       ]
     );
     $salsify_field_id_mapping = Salsify::getFieldMappings(
       [
         'entity_type' => $entity_type,
-        'entity_bundle' => $entity_bundle,
+        'bundle' => $entity_bundle,
         'method' => 'manual',
       ],
       'field_id'
@@ -162,7 +162,7 @@ class MappingConfigForm extends ConfigFormBase {
         'salsify_id' => $salsify_id,
         'salsify_data_type' => $salsify_field['salsify:data_type'],
         'entity_type' => $entity_type,
-        'entity_bundle' => $entity_bundle,
+        'bundle' => $entity_bundle,
         'field_name' => $field_map['value'],
         'data' => serialize($salsify_field),
         'method' => 'manual',
@@ -184,7 +184,7 @@ class MappingConfigForm extends ConfigFormBase {
           else {
             Salsify::deleteFieldMapping([
               'entity_type' => $entity_type,
-              'entity_bundle' => $entity_bundle,
+              'bundle' => $entity_bundle,
               'method' => 'manual',
               'field_name' => $salsify_id_map['field_name'],
             ]);
@@ -206,13 +206,13 @@ class MappingConfigForm extends ConfigFormBase {
           else {
             Salsify::deleteFieldMapping([
               'entity_type' => $entity_type,
-              'entity_bundle' => $entity_bundle,
+              'bundle' => $entity_bundle,
               'method' => 'manual',
               'field_name' => $field_map['value'],
             ]);
             Salsify::deleteFieldMapping([
               'entity_type' => $entity_type,
-              'entity_bundle' => $entity_bundle,
+              'bundle' => $entity_bundle,
               'method' => 'dynamic',
               'field_name' => $field_map['value'],
             ]);
@@ -246,7 +246,7 @@ class MappingConfigForm extends ConfigFormBase {
       if ($field_name_map['method'] == 'manual') {
         Salsify::deleteFieldMapping([
           'entity_type' => $field_name_map['entity_type'],
-          'entity_bundle' => $field_name_map['entity_bundle'],
+          'bundle' => $field_name_map['bundle'],
           'method' => 'manual',
           'field_name' => $field_name_map['field_name'],
         ]);

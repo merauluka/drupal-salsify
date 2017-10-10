@@ -12,7 +12,6 @@ use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\salsify_integration\Event\SalsifyGetEntityTypesEvent;
 use Drupal\salsify_integration\SalsifyFields;
-use Drupal\salsify_integration\SalsifySingleField;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -148,11 +147,11 @@ class ConfigForm extends ConfigFormBase {
       foreach ($entity_bundles as $entity_bundle) {
         $entity_bundles_options[$entity_bundle->id()] = $entity_bundle->label();
       }
-      $form['salsify_api_settings']['setup_types']['entity_bundle'] = [
+      $form['salsify_api_settings']['setup_types']['bundle'] = [
         '#type' => 'select',
         '#title' => $this->t('Select a bundle'),
         '#options' => $entity_bundles_options,
-        '#default_value' => $config->get('entity_bundle'),
+        '#default_value' => $config->get('bundle'),
         '#description' => $this->t('The bundle to use for product mapping from Salsify.'),
         '#required' => TRUE,
         '#cache' => [
@@ -163,7 +162,7 @@ class ConfigForm extends ConfigFormBase {
       ];
     }
 
-    if ($config->get('product_feed_url') && $config->get('access_token') && $config->get('entity_bundle')) {
+    if ($config->get('product_feed_url') && $config->get('access_token') && $config->get('bundle')) {
       $form['salsify_operations'] = [
         '#type' => 'fieldset',
         '#title' => $this->t('Operations'),
@@ -269,12 +268,7 @@ class ConfigForm extends ConfigFormBase {
     $trigger = $form_state->getTriggeringElement();
     if ($trigger['#id'] == 'edit-salsify-start-import') {
       $container = \Drupal::getContainer();
-      if ($form_state->getValue('import_method') == 'serialized') {
-        $product_feed = SalsifySingleField::create($container);
-      }
-      else {
-        $product_feed = SalsifyFields::create($container);
-      }
+      $product_feed = SalsifyFields::create($container);
       $results = $product_feed->importProductData(TRUE);
       if ($results) {
         drupal_set_message($results['message'], $results['status']);
@@ -292,7 +286,7 @@ class ConfigForm extends ConfigFormBase {
     // Remove the options settings if the import method was changed from fields
     // to serialized.
     $new_import_method = $form_state->getValue('import_method');
-    if ($config->get('import_method') != $new_import_method && $new_import_method == 'serialized') {
+    if ($config->get('import_method') != $new_import_method && $new_import_method == 'manual') {
       $config_options = $this->configFactory->getEditable('salsify_integration.field_options');
       $config_options->delete();
     }
@@ -301,7 +295,7 @@ class ConfigForm extends ConfigFormBase {
     $config->set('product_feed_url', $form_state->getValue('product_feed_url'));
     $config->set('access_token', $form_state->getValue('access_token'));
     $config->set('entity_type', $form_state->getValue('entity_type'));
-    $config->set('entity_bundle', $form_state->getValue('entity_bundle'));
+    $config->set('bundle', $form_state->getValue('bundle'));
     $config->set('keep_fields_on_uninstall', $form_state->getValue('keep_fields_on_uninstall'));
     $config->set('entity_reference_allow', $form_state->getValue('entity_reference_allow'));
     $config->set('process_media_assets', $form_state->getValue('process_media_assets'));

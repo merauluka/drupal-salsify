@@ -182,7 +182,6 @@ class Salsify {
     try {
       $raw_data = $this->getRawData();
       $product_data = [];
-      $field_data = &$product_data['fields'];
 
       if (isset($raw_data['digital_assets'])) {
         // Rekey the Digital Assets by their Salsify ID to make looking them
@@ -192,24 +191,25 @@ class Salsify {
 
       // Organize the fields and options (for enumerated fields) by salsify:id.
       foreach ($raw_data['attributes'] as $attribute) {
-        $field_data[$attribute['salsify:id']] = $attribute;
-        $field_data[$attribute['salsify:id']]['date_updated'] = strtotime($attribute['salsify:updated_at']);
-        foreach ($field_data[$attribute['salsify:id']]['salsify:entity_types'] as $entity_types) {
+        $product_data['fields'][$attribute['salsify:id']] = $attribute;
+        $product_data['fields'][$attribute['salsify:id']]['date_updated'] = strtotime($attribute['salsify:updated_at']);
+        foreach ($product_data['fields'][$attribute['salsify:id']]['salsify:entity_types'] as $entity_types) {
           $product_data['entity_field_mapping'][$entity_types][] = $attribute['salsify:system_id'];
         }
       }
       foreach ($raw_data['attribute_values'] as $value) {
-        $field_data[$value['salsify:attribute_id']]['values'][$value['salsify:id']] = $value;
+        $product_data['fields'][$value['salsify:attribute_id']]['values'][$value['salsify:id']] = $value;
         $date_updated = strtotime($value['salsify:updated_at']);
-        if ($date_updated > $field_data[$value['salsify:attribute_id']]['date_updated']) {
-          $field_data[$value['salsify:attribute_id']]['date_updated'] = $date_updated;
+        if ($date_updated > $product_data['fields'][$value['salsify:attribute_id']]['date_updated']) {
+          $product_data['fields'][$value['salsify:attribute_id']]['date_updated'] = $date_updated;
         }
       }
 
       // Add in the Salsify id from the imported content as a special field.
       // This will allow for tracking data that has already been imported into
       // the system without making the user manage the ID field.
-      $field_data['salsify:id'] = [
+      $salsify_internal_fields = [];
+      $salsify_internal_fields['salsify:id'] = [
         'salsify:id' => 'salsify:id',
         'salsify:system_id' => 'salsify:system_id',
         'salsify:name' => t('Salsify Sync ID'),
@@ -217,7 +217,7 @@ class Salsify {
         'salsify:created_at' => date('Y-m-d', time()),
         'date_updated' => time(),
       ];
-      $field_data['salsify:updated_at'] = [
+      $salsify_internal_fields['salsify:updated_at'] = [
         'salsify:id' => 'salsify:updated_at',
         'salsify:system_id' => 'salsify:system_id',
         'salsify:name' => t('Salsify Updated Date'),
@@ -225,6 +225,7 @@ class Salsify {
         'salsify:created_at' => date('Y-m-d', time()),
         'date_updated' => time(),
       ];
+      $product_data['fields'] = array_merge($product_data['fields'], $salsify_internal_fields);
 
       $new_product_data = $product_data + $raw_data;
 
@@ -260,7 +261,7 @@ class Salsify {
    *   The content type to use for Salsify data.
    */
   protected function getEntityBundle() {
-    return $this->config->get('entity_bundle');
+    return $this->config->get('bundle');
   }
 
   /**
@@ -377,7 +378,7 @@ class Salsify {
     if (isset($values['field_name'])) {
       $field_name = '.' . $values['field_name'];
     }
-    return 'salsify_integration.' . $values['method'] . '.' . $values['entity_type'] . '.' . $values['entity_bundle'] . $field_name;
+    return 'salsify_integration.' . $values['method'] . '.' . $values['entity_type'] . '.' . $values['bundle'] . $field_name;
   }
 
   /**
@@ -499,6 +500,19 @@ class Salsify {
   }
 
   /**
+   * Utility function to return an array of Salsify and Drupal system values.
+   *
+   * @return array
+   *   The array of Salsify => Drupal field names.
+   */
+  protected static function getSystemFieldNames() {
+    return [
+      'salsify:id' => 'salsify_id',
+      'salsify:updated_at' => 'salsify_updated',
+    ];
+  }
+
+  /**
    * Utility function to rekey a nested array using one of its subvalues.
    *
    * @param array $array
@@ -520,10 +534,8 @@ class Salsify {
       }
     }
 
-    return (!empty($new_array) ? $new_array : FALSE);
+    return $new_array;
 
   }
-
-  protected function processTaxonomyTerms() {}
 
 }

@@ -135,7 +135,7 @@ class SalsifyImportMedia {
 
     // Set the default fields to use to lookup any existing media that was
     // previously imported.
-    $field_name = 'salsify_salsifyid';
+    $field_name = 'salsify_id';
     $field_id_storage = FieldStorageConfig::loadByName('media', $field_name);
     $media_storage = $this->entityTypeManager->getStorage('media');
 

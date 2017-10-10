@@ -70,30 +70,29 @@ function salsify_integration_field_config_delete(FieldConfig $field) {
   // table.
   $field_name = $field->get('field_name');
   $entity_type = $field->get('entity_type');
-  $bundle = $field->get('bundle');
+  $entity_bundle = $field->get('bundle');
   $field_storage = FieldStorageConfig::loadByName($entity_type, $field_name);
-  $container = \Drupal::getContainer();
-  $salsify = SalsifyFields::create($container);
+  $salsify = SalsifyFields::create(\Drupal::getContainer());
 
   if ($field_storage) {
     // If the field is still set somewhere on the system, then don't remove it
     // and leave the field mapping intact.
-    $bundles = $field_storage->getBundles();
+    $entity_bundles = $field_storage->getBundles();
 
     // Perform the deletion logic on the Salsify data.
-    if (empty($bundles)) {
-      $field_id = salsify_integration_get_salsify_id($field_name, $entity_type, $bundle)[0];
+    if (empty($entity_bundles)) {
+      $field_id = salsify_integration_get_salsify_id($field_name, $entity_type, $entity_bundle)[0];
       $salsify->removeFieldOptions($field_id);
       $salsify->deleteFieldMapping([
         'method' => 'manual',
         'entity_type' => $entity_type,
-        'bundle' => $bundle,
+        'bundle' => $entity_bundle,
         'field_name' => $field_name,
       ]);
       $salsify->deleteFieldMapping([
         'method' => 'dynamic',
         'entity_type' => $entity_type,
-        'bundle' => $bundle,
+        'bundle' => $entity_bundle,
         'field_name' => $field_name,
       ]);
     }
@@ -102,13 +101,13 @@ function salsify_integration_field_config_delete(FieldConfig $field) {
     $salsify->deleteFieldMapping([
       'method' => 'manual',
       'entity_type' => $entity_type,
-      'bundle' => $bundle,
+      'bundle' => $entity_bundle,
       'field_name' => $field_name,
     ]);
     $salsify->deleteFieldMapping([
       'method' => 'dynamic',
       'entity_type' => $entity_type,
-      'bundle' => $bundle,
+      'bundle' => $entity_bundle,
       'field_name' => $field_name,
     ]);
   }

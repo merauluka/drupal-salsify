@@ -5,7 +5,8 @@ namespace Drupal\salsify_integration\Event;
 use Symfony\Component\EventDispatcher\Event;
 
 /**
- * Class SalsifyGetEntityTypesEvent
+ * Class SalsifyGetEntityTypesEvent.
+ *
  * @package Drupal\salsify_integration
  */
 class SalsifyGetEntityTypesEvent extends Event {
@@ -30,7 +31,10 @@ class SalsifyGetEntityTypesEvent extends Event {
   }
 
   /**
+   * Get the entity types available.
+   *
    * @return array
+   *   The array of entity types (machine name => UI friendly name).
    */
   public function getEntityTypesList() {
     return $this->entityTypesList;

@@ -31,14 +31,15 @@ class SalsifyFields extends Salsify {
 
       // Sync the fields in Drupal with the fields in the Salsify feed.
       // TODO: Put this logic into a queue since it can get resource intensive.
-      if ($import_method == 'dynamic' && $entity_type && $entity_bundle) {
+      if ($entity_type && $entity_bundle) {
         // Load the product and field data from Salsify.
         $product_data = $this->getProductData();
 
         $field_mapping = $this->getFieldMappings(
           [
             'entity_type' => $entity_type,
-            'entity_bundle' => $entity_bundle,
+            'bundle' => $entity_bundle,
+            'method' => 'dynamic',
           ],
           'salsify_id'
         );
@@ -48,19 +49,29 @@ class SalsifyFields extends Salsify {
         $manual_field_mapping = $this->getFieldMappings(
           [
             'entity_type' => $entity_type,
-            'entity_bundle' => $entity_bundle,
+            'bundle' => $entity_bundle,
             'method' => 'manual',
           ],
           'salsify_id'
         );
         $manual_field_names = array_keys($manual_field_mapping);
-        $salsify_fields = array_diff_key($product_data['fields'], $manual_field_names);
+        $salsify_id_fields = parent::getSystemFieldNames();
+
+        // Only generate new fields if the import method is dynamic. Otherwise
+        // only generate the required system tracking fields.
+        if ($import_method == 'dynamic') {
+          $salsify_fields = array_diff_key($product_data['fields'], $manual_field_names);
+        }
+        else {
+          $salsify_fields = array_intersect_key($product_data['fields'], $salsify_id_fields);
+        }
 
         // Determine the dynamically mapped fields that are in the field mapping
         // that aren't in the list of fields from Salsify.
         $field_diff = array_diff_key($field_mapping, $salsify_fields);
 
-        // Setup the list of Drupal fields and machine names.
+        // Setup the list of Drupal fields and machine names that belong to the
+        // targeted entity and entity bundle.
         $filtered_fields = $this->getContentTypeFields($entity_type, $entity_bundle);
         $field_machine_names = array_keys($filtered_fields);
 
@@ -80,11 +91,11 @@ class SalsifyFields extends Salsify {
         // Create any fields that don't yet exist in the system.
         $salsify_diff = array_diff_key($salsify_fields, $field_mapping);
         foreach ($salsify_diff as $salsify_field) {
-          $field_name = $this->createFieldMachineName($salsify_field['salsify:id'], $field_machine_names);
+          $field_name = self::createFieldMachineName($salsify_field['salsify:id'], $field_machine_names);
 
           // If the field exists on the system, but isn't in the map, just add
-          // it to the map instead of trying to create a new field. This should
-          // cover if fields were left over from an uninstall.
+          // it to the map instead of trying to create a new field. This
+          // should cover if fields were left over from an uninstall.
           if (isset($filtered_fields[$field_name])) {
             $this->createFieldMapping([
               'field_id' => $salsify_field['salsify:system_id'],
@@ -107,13 +118,26 @@ class SalsifyFields extends Salsify {
         }
 
         // Find any fields that are already in the system that weren't in the
-        // Salsify feed. This means they were deleted from Salsify and need to
+        // Salsify feed. This means they were deleted from Salsify, or the
+        // import method has been changed from dynamic to manual. They need to
         // be deleted on the Drupal side.
         if ($filtered_fields) {
+          $field_diff = $this->rekeyArray($field_diff, 'field_name');
           $remove_fields = array_intersect_key($filtered_fields, $field_diff);
           foreach ($remove_fields as $key => $field) {
             if (strpos($key, 'salsify') == 0) {
               $field->delete();
+            }
+          }
+          // If the import method is manual, remove any dynamically generated
+          // field based on the prefix "salsifysync". This will preserve the
+          // "salsify_" prefixed fields that are required for this integration
+          // to function properly.
+          if ($import_method == 'manual') {
+            foreach ($filtered_fields as $field_name => $filtered_field) {
+              if (strpos($field_name, 'salsifysync_') !== FALSE) {
+                $field_diff[$field_name] = $filtered_field;
+              }
             }
           }
           foreach ($field_diff as $salsify_field_id => $field) {
@@ -224,17 +248,14 @@ class SalsifyFields extends Salsify {
   public static function createFieldMachineName($field_name, array &$field_machine_names) {
     // Differentiate between default and custom salsify fields.
     if (strpos($field_name, 'salsify:') !== FALSE) {
-      $prefix = 'salsify_';
-    }
-    else {
-      $prefix = 'salsifysync_';
+      $salsify_ids = parent::getSystemFieldNames();
+      if (isset($salsify_ids[$field_name])) {
+        return $salsify_ids[$field_name];
+      }
     }
 
-    // Override the default field name for the updated_at field to match what
-    // is used in the single field mapping class.
-    if ($field_name == 'salsify:updated_at') {
-      $field_name = 'updated';
-    }
+    // Set the default dynamic field prefix.
+    $prefix = 'salsifysync_';
 
     // Clean the string to remove spaces.
     $field_name = str_replace('-', '_', $field_name);

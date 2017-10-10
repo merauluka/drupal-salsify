@@ -38,7 +38,7 @@ class MediaMappingConfigForm extends MappingConfigForm {
       $salsify_field_mapping = Salsify::getFieldMappings(
         [
           'entity_type' => $entity_type,
-          'entity_bundle' => $entity_bundle,
+          'bundle' => $entity_bundle,
           'method' => 'manual',
         ],
         'salsify_id'
@@ -104,7 +104,6 @@ class MediaMappingConfigForm extends MappingConfigForm {
 
     return $form;
   }
-
 
   /**
    * Utility function to load or refresh the array of Salsify data.

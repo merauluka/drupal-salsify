@@ -4,5 +4,4 @@ description: 'Salsify integration module for handling product content.'
 # core: 8.x
 package: Web services
 
-version: '8.x-1.x-dev'
 core: '8.x'

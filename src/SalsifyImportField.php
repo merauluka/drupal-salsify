@@ -38,7 +38,7 @@ class SalsifyImportField extends SalsifyImport {
    *   The entity type manager interface.
    * @param \Drupal\Core\Cache\CacheBackendInterface $cache_salsify
    *   The Salsify cache interface.
-   * @param \Drupal\Core\Extension\ModuleHandler $module_handler
+   * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
    *   The module handler interface.
    */
   public function __construct(ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, CacheBackendInterface $cache_salsify, ModuleHandlerInterface $module_handler) {
@@ -46,6 +46,9 @@ class SalsifyImportField extends SalsifyImport {
     $this->moduleHandler = $module_handler;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('config.factory'),
@@ -64,7 +67,7 @@ class SalsifyImportField extends SalsifyImport {
    */
   public function processSalsifyItem(array $product_data) {
     $entity_type = $this->config->get('entity_type');
-    $entity_bundle = $this->config->get('entity_bundle');
+    $entity_bundle = $this->config->get('bundle');
 
     // Store this to send through to hook_salsify_node_presave_alter().
     $original_product_data = $product_data;
@@ -80,10 +83,10 @@ class SalsifyImportField extends SalsifyImport {
 
     // Lookup any existing nodes in order to overwrite their contents.
     $results = $this->entityQuery->get($entity_type)
-      ->condition('salsify_salsifyid', $product_data['salsify:id'])
+      ->condition('salsify_id', $product_data['salsify:id'])
       ->execute();
 
-    // Load the existing node or generate a new one.
+    // Load the existing entity or generate a new one.
     if ($results) {
       $entity_id = array_values($results)[0];
       $entity = $this->entityTypeManager->getStorage($entity_type)->load($entity_id);
@@ -103,15 +106,24 @@ class SalsifyImportField extends SalsifyImport {
       // Allow users to alter the title set when a node is created by invoking
       // hook_salsify_process_node_title_alter().
       $this->moduleHandler->alter('salsify_process_node_title', $title, $product_data);
-      $entity = $this->entityTypeManager->getStorage($entity_type)->create([
-        'title' => $title,
-        'type' => $entity_bundle,
-        'created' => strtotime($product_data['salsify:created_at']),
-        'changed' => strtotime($product_data['salsify:updated_at']),
+      $entity_definition = $this->entityTypeManager->getDefinition($entity_type);
+      $entity_keys = $entity_definition->getKeys();
+      $entity_values = [
+        $entity_keys['label'] => $title,
+        $entity_keys['bundle'] => $entity_bundle,
         'salsify_updated' => strtotime($product_data['salsify:updated_at']),
-        'salsify_salsifyid' => $product_data['salsify:id'],
-        'status' => 1,
-      ]);
+        'salsify_id' => $product_data['salsify:id'],
+      ];
+      if (isset($entity_keys['created'])) {
+        $entity_values['created'] = strtotime($product_data['salsify:created_at']);
+      }
+      if (isset($entity_keys['changed'])) {
+        $entity_values['changed'] = strtotime($product_data['salsify:updated_at']);
+      }
+      if (isset($entity_keys['status'])) {
+        $entity_values['status'] = 1;
+      }
+      $entity = $this->entityTypeManager->getStorage($entity_type)->create($entity_values);
       $entity->getTypedData();
       $entity->save();
     }
@@ -119,8 +131,8 @@ class SalsifyImportField extends SalsifyImport {
     // Load the configurable fields for this content type.
     $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
     // Unset the system values since they've already been processed.
-    unset($filtered_fields['salsify_updated']);
-    unset($filtered_fields['salsify_salsifyid']);
+    unset($salsify_field_mapping['salsify_updated']);
+    unset($salsify_field_mapping['salsify_id']);
 
     // Set the field data against the Salsify node. Remove the data from the
     // serialized list to prevent redundancy.

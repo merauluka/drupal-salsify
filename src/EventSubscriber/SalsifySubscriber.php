@@ -59,15 +59,15 @@ class SalsifySubscriber implements EventSubscriberInterface {
 
       if ($changed && $config->get('entity_type') && $config->getOriginal('entity_type')) {
         /** @var \Drupal\Core\Queue\QueueInterface $queue */
-        $queue = $this->queueFactory->get('salsify_integration_content_type_update');
+        $queue = $this->queueFactory->get('salsify_integration_entity_type_update');
         $item = [
           'original' => [
             'entity_type' => $config->getOriginal('entity_type'),
-            'entity_bundle' => $config->getOriginal('entity_bundle'),
+            'bundle' => $config->getOriginal('bundle'),
           ],
           'current' => [
             'entity_type' => $config->get('entity_type'),
-            'entity_bundle' => $config->getOriginal('entity_bundle'),
+            'bundle' => $config->get('bundle'),
           ],
         ];
         $queue->createItem($item);

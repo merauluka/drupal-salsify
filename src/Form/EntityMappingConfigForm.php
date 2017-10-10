@@ -24,7 +24,7 @@ class EntityMappingConfigForm extends MappingConfigForm {
     $form = parent::buildForm($form, $form_state);
     $config = $this->config('salsify_integration.settings');
     $entity_type = $config->get('entity_type');
-    $entity_bundle = $config->get('entity_bundle');
+    $entity_bundle = $config->get('bundle');
     $form['salsify_entity_type'] = [
       '#type' => 'value',
       '#value' => $entity_type,
@@ -39,7 +39,7 @@ class EntityMappingConfigForm extends MappingConfigForm {
       $salsify_field_mapping = Salsify::getFieldMappings(
         [
           'entity_type' => $entity_type,
-          'entity_bundle' => $entity_bundle,
+          'bundle' => $entity_bundle,
           'method' => 'manual',
         ],
         'salsify_id'

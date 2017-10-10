@@ -74,7 +74,10 @@ class SalsifyImport {
   }
 
   /**
-   * {@inheritdoc}
+   * Creates a new SalsifyImport object.
+   *
+   * @param \Symfony\Component\DependencyInjection\ContainerInterface $container
+   *   The container object to use when gathering dependencies.
    */
   public static function create(ContainerInterface $container) {
     return new static(

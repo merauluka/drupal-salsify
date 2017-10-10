@@ -54,33 +54,38 @@ class SalsifyConfigEntityTypeSubscriber implements EventSubscriberInterface {
   }
 
   /**
-   * This method is called when the SalsifyGetEntityTypesEvent::GET_TYPES event is dispatched.
+   * Called when the SalsifyGetEntityTypesEvent::GET_TYPES event is dispatched.
    *
    * @param \Drupal\salsify_integration\Event\SalsifyGetEntityTypesEvent $event
    *   The event triggered while loading the config entity types.
    */
   public function addEntityTypes(SalsifyGetEntityTypesEvent $event) {
+    // Get the list of entity types on the system.
+    $entity_types_list = $event->getEntityTypesList();
+    ksort($entity_types_list);
+    $original_entity_types_list = $entity_types_list;
+    $entity_types = $this->entityTypeManager->getDefinitions();
     // Add support for the ECK module.
     if ($this->moduleHandler->moduleExists('eck')) {
-      $entity_types = $this->entityTypeManager->getDefinitions();
       $eck_types = [];
       foreach ($entity_types as $entity_type) {
         if ($entity_type->getProvider() == 'eck' && $entity_type->getGroup() == 'content') {
           $eck_types[$entity_type->id()] = $entity_type->getLabel();
         }
       }
-      $entity_types_list = $event->getEntityTypesList();
-      $combined_types = $entity_types_list + $eck_types;
-      ksort($combined_types);
-      $event->setEntityTypesList($combined_types);
+      if ($eck_types) {
+        $entity_types_list = $entity_types_list + $eck_types;
+        ksort($entity_types_list);
+      }
     }
     // Add support for Commerce Products.
     if ($this->moduleHandler->moduleExists('commerce_product')) {
-      $entity_type = $this->entityTypeManager->getDefinition('commerce_product');
-      $entity_types_list = $event->getEntityTypesList();
-      $entity_types_list['commerce_product'] = $entity_type->getLabel();
-      ksort($combined_types);
-      $event->setEntityTypesList($combined_types);
+      $entity_types_list['commerce_product'] = t('Commerce Product');
+      ksort($entity_types_list);
+    }
+    // If the entity type list has changed, update it on the event.
+    if ($entity_types_list != $original_entity_types_list) {
+      $event->setEntityTypesList($entity_types_list);
     }
   }
 
