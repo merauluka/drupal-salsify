@@ -6,7 +6,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\salsify_integration\Salsify;
 
 /**
- * Distribution Configuration form class.
+ * Entity Mapping Configuration form class.
  */
 class EntityMappingConfigForm extends MappingConfigForm {
 
@@ -54,13 +54,13 @@ class EntityMappingConfigForm extends MappingConfigForm {
       $form['salsify_field_mapping'] = [
         '#type' => 'table',
         '#header' => array($this->t('Salsify Field'), $this->t('Drupal Field')),
-        '#empty' => $this->t('No fields on the selected content type are compatible with this integration.'),
+        '#empty' => $this->t('No fields on the selected entity type are compatible with this integration.'),
         '#tableselect' => FALSE,
         '#weight' => 50,
       ];
 
       // Gather all of the configured fields on the configured content type.
-      $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
+      $filtered_fields = Salsify::getEntityTypeFields($entity_type, $entity_bundle);
 
       // Load the Salsify data array.
       $this->loadSalsifyData();

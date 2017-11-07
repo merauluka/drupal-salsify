@@ -8,6 +8,20 @@ salsify_integration.mapping:
   route_name: salsify_integration.mapping
   base_route: salsify_integration.configuration
 
+rinnai_salsify.media_mapping:
+  title: 'Media Field Mapping'
+  route_name: salsify_integration.media_mapping
+  base_route: salsify_integration.configuration
+
 salsify_integration.media_assets:
   deriver: 'Drupal\salsify_integration\Plugin\Derivative\DynamicLocalTasks'
   weight: 100
+
+rinnai_salsify.commerce_product_variation:
+  title: 'Commerce Product Variation Field Mapping'
+  route_name: salsify_integration.commerce_product_variation
+  base_route: salsify_integration.configuration
+
+# salsify_integration.commerce_product_variation:
+#   deriver: 'Drupal\salsify_integration\Plugin\Derivative\DynamicLocalTasks'
+#   weight: 100

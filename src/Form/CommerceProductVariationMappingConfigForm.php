@@ -6,15 +6,15 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\salsify_integration\Salsify;
 
 /**
- * Media Mapping Configuration form class.
+ * Commerce Product Variation Mapping Configuration form class.
  */
-class MediaMappingConfigForm extends MappingConfigForm {
+class CommerceProductVariationMappingConfigForm extends MappingConfigForm {
 
   /**
    * {@inheritdoc}
    */
   public function getFormId() {
-    return 'salsify_integration_media_mapping_config_form';
+    return 'salsify_integration_commerce_variation_mapping_config_form';
   }
 
   /**
@@ -23,8 +23,8 @@ class MediaMappingConfigForm extends MappingConfigForm {
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildForm($form, $form_state);
     $request = $this->getRequest();
-    $entity_type = 'media';
-    $entity_bundle = $request->attributes->get('media_type');
+    $entity_type = 'commerce_product_variation';
+    $entity_bundle = 'default';
     $form['salsify_entity_type'] = [
       '#type' => 'value',
       '#value' => $entity_type,
@@ -85,7 +85,7 @@ class MediaMappingConfigForm extends MappingConfigForm {
         else {
           $form['salsify_field_mapping'][$key]['value'] = [
             '#type' => 'markup',
-            '#markup' => $this->t('No fields on the media type are compatible with this field.'),
+            '#markup' => $this->t('No fields on the product variation are compatible with this field.'),
           ];
           $incompatible[$key] = $salsify_field;
         }
@@ -93,7 +93,7 @@ class MediaMappingConfigForm extends MappingConfigForm {
 
       $form['subheader'] = [
         '#type' => '#markup',
-        '#markup' => $this->t('Of the @total fields from Salsify, @no-match do not have compatible fields available on the media type.', ['@no-match' => count($incompatible), '@total' => count($salsify_fields)]),
+        '#markup' => $this->t('Of the @total fields from Salsify, @no-match do not have compatible fields available on the product variation.', ['@no-match' => count($incompatible), '@total' => count($salsify_fields)]),
         '#weight' => 0,
         '#prefix' => '<p>',
         '#suffix' => '</p>',
@@ -119,16 +119,16 @@ class MediaMappingConfigForm extends MappingConfigForm {
     $salsify_fields = [];
 
     // Allow the user to map any fields that aren't system values in Salsify.
-    if (isset($salsify_field_map['digital_assets'])) {
-      // Filter out all fields that aren't set against media assets.
-      $media_fields = $salsify_field_map['digital_assets'];
-      $salsify_fields = $this->salsifyData['fields'];
-      foreach ($salsify_fields as $key => $salsify_field) {
-        if (!in_array($salsify_field['salsify:system_id'], $media_fields)) {
-          unset($salsify_fields[$key]);
-        }
-      }
-    }
+    // if (isset($salsify_field_map['digital_assets'])) {
+    //   // Filter out all fields that aren't set against media assets.
+    //   $media_fields = $salsify_field_map['digital_assets'];
+    //   $salsify_fields = $this->salsifyData['fields'];
+    //   foreach ($salsify_fields as $key => $salsify_field) {
+    //     if (!in_array($salsify_field['salsify:system_id'], $media_fields)) {
+    //       unset($salsify_fields[$key]);
+    //     }
+    //   }
+    // }
 
     // Augment the custom fields with system data.
     $salsify_fields['salsify:url'] = [

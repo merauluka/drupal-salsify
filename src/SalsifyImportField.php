@@ -131,7 +131,7 @@ class SalsifyImportField extends SalsifyImport {
     }
 
     // Load the configurable fields for this content type.
-    $filtered_fields = Salsify::getContentTypeFields($entity_type, $entity_bundle);
+    $filtered_fields = Salsify::getEntityTypeFields($entity_type, $entity_bundle);
     // Unset the system values since they've already been processed.
     unset($salsify_field_mapping['salsify_updated']);
     unset($salsify_field_mapping['salsify_id']);

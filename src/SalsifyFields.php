@@ -71,7 +71,7 @@ class SalsifyFields extends Salsify {
 
         // Setup the list of Drupal fields and machine names that belong to the
         // targeted entity and entity bundle.
-        $filtered_fields = $this->getContentTypeFields($entity_type, $entity_bundle);
+        $filtered_fields = $this->getEntityTypeFields($entity_type, $entity_bundle);
         $field_machine_names = array_keys($filtered_fields);
 
         // Find all of the fields from Salsify that are already in the system.
@@ -264,7 +264,7 @@ class SalsifyFields extends Salsify {
         'salsify_id'
       ),
     ];
-    $field_configs = $this->getContentTypeFields($entity_type, $entity_bundle);
+    $field_configs = $this->getEntityTypeFields($entity_type, $entity_bundle);
     foreach ($field_mappings as $method => $field_mappings_by_method) {
       foreach ($field_mappings_by_method as $salsify_field_name => $field_mapping) {
         $field_name = $field_mapping['field_name'];

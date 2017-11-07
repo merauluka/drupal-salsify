@@ -22,3 +22,11 @@ salsify_integration.media_mapping:
     media_type: 'image'
   requirements:
     _permission: 'access salsify config page'
+
+salsify_integration.commerce_product_variation:
+  path: '/admin/config/services/salsify/mapping/commerce-variation'
+  defaults:
+    _form: 'Drupal\salsify_integration\Form\CommerceProductVariationMappingConfigForm'
+    _title: 'Commerce: Product Variation Field Mapping'
+  requirements:
+    _permission: 'access salsify config page'

@@ -265,7 +265,7 @@ class Salsify {
   }
 
   /**
-   * Utility function to load a content types configurable fields.
+   * Utility function to load a entity type's configurable fields.
    *
    * @param string $entity_type
    *   The type of entity to use to lookup fields.
@@ -275,7 +275,7 @@ class Salsify {
    * @return array
    *   An array of field objects.
    */
-  public static function getContentTypeFields($entity_type, $entity_bundle) {
+  public static function getEntityTypeFields($entity_type, $entity_bundle) {
     $fields = \Drupal::service('entity_field.manager')->getFieldDefinitions($entity_type, $entity_bundle);
     $filtered_fields = array_filter(
       $fields, function ($field_definition) {

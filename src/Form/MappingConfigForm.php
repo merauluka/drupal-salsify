@@ -13,7 +13,7 @@ use Drupal\salsify_integration\Salsify;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Distribution Configuration form class.
+ * Mapping Configuration form class.
  */
 class MappingConfigForm extends ConfigFormBase {
 
