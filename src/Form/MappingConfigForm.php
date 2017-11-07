@@ -303,15 +303,12 @@ class MappingConfigForm extends ConfigFormBase {
             break;
 
           case 'entity_reference':
-            if ($config->get('entity_reference_allow')) {
-              $handler = $field->getSetting('handler');
-              if ($handler == 'default:taxonomy_term') {
-                $fields_by_type['enumerated'][$field_options['field_name']] = $field_options['title'];
-                $fields_by_type['string'][$field_options['field_name']] = $field_options['title'];
-              }
+            $handler = $field->getSetting('handler');
+            if ($config->get('entity_reference_allow') || $handler == 'default:taxonomy_term') {
+              $fields_by_type['enumerated'][$field_options['field_name']] = $field_options['title'];
+              $fields_by_type['string'][$field_options['field_name']] = $field_options['title'];
             }
             if ($config->get('process_media_assets')) {
-              $handler = $field->getSetting('handler');
               if ($handler == 'default:media') {
                 $fields_by_type['digital_asset'][$field_options['field_name']] = $field_options['title'];
               }

@@ -20,42 +20,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *
  * @package Drupal\salsify_integration
  */
-class SalsifyImportMedia {
-
-  /**
-   * The cache object associated with the specified bin.
-   *
-   * @var \Drupal\Core\Cache\CacheBackendInterface
-   */
-  protected $cache;
-
-  /**
-   * The configFactory interface.
-   *
-   * @var \Drupal\Core\Config\ConfigFactoryInterface
-   */
-  protected $configFactory;
-
-  /**
-   * The Salsify config.
-   *
-   * @var \Drupal\Core\Config\ImmutableConfig
-   */
-  protected $config;
-
-  /**
-   * Entity query factory.
-   *
-   * @var \Drupal\Core\Entity\Query\QueryFactory
-   */
-  protected $entityQuery;
-
-  /**
-   * The Entity Type Manager.
-   *
-   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
-   */
-  protected $entityTypeManager;
+class SalsifyImportMedia extends SalsifyImport {
 
   /**
    * The field storage config handler.
@@ -70,38 +35,6 @@ class SalsifyImportMedia {
    * @var \Drupal\field\Entity\FieldConfig
    */
   protected $fieldConfig;
-
-  /**
-   * Constructs a \Drupal\salsify_integration\Salsify object.
-   *
-   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
-   *   The config factory interface.
-   * @param \Drupal\Core\Entity\Query\QueryFactory $entity_query
-   *   The query factory.
-   * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_type_manager
-   *   The entity type manager.
-   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_salsify
-   *   The cache object associated with the Salsify bin.
-   */
-  public function __construct(ConfigFactoryInterface $config_factory, QueryFactory $entity_query, EntityTypeManagerInterface $entity_type_manager, CacheBackendInterface $cache_salsify) {
-    $this->cache = $cache_salsify;
-    $this->configFactory = $config_factory;
-    $this->config = $this->configFactory->get('salsify_integration.settings');
-    $this->entityQuery = $entity_query;
-    $this->entityTypeManager = $entity_type_manager;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function create(ContainerInterface $container) {
-    return new static(
-      $container->get('config.factory'),
-      $container->get('entity.query'),
-      $container->get('entity_type.manager'),
-      $container->get('cache.default')
-    );
-  }
 
   /**
    * A function to import Salsify data as nodes in Drupal.

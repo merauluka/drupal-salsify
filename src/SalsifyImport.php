@@ -89,18 +89,20 @@ class SalsifyImport {
   }
 
   /**
-   * A function to import Salsify data as nodes in Drupal.
+   * A function to import Salsify data as entities in Drupal.
    *
    * @param array $product_data
    *   The Salsify individual product data to process.
+   * @param bool $force_update
+   *   If set to TRUE, the updated date highwater mark will be ignored.
    */
-  public function processSalsifyItem(array $product_data) {}
+  public function processSalsifyItem(array $product_data, $force_update = FALSE) {}
 
   /**
    * Helper function to return a properly formatting set of field options.
    *
    * @param array $field
-   *   The field mapping database object.
+   *   The field mapping array.
    * @param array|string $field_data
    *   The Salsify field data from the queue.
    *

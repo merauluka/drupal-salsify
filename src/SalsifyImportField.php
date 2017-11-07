@@ -64,8 +64,10 @@ class SalsifyImportField extends SalsifyImport {
    *
    * @param array $product_data
    *   The Salsify individual product data to process.
+   * @param bool $force_update
+   *   If set to TRUE, the updated date highwater mark will be ignored.
    */
-  public function processSalsifyItem(array $product_data) {
+  public function processSalsifyItem(array $product_data, $force_update = FALSE) {
     $entity_type = $this->config->get('entity_type');
     $entity_bundle = $this->config->get('bundle');
 
@@ -81,7 +83,7 @@ class SalsifyImportField extends SalsifyImport {
       'salsify_id'
     );
 
-    // Lookup any existing nodes in order to overwrite their contents.
+    // Lookup any existing entities in order to overwrite their contents.
     $results = $this->entityQuery->get($entity_type)
       ->condition('salsify_id', $product_data['salsify:id'])
       ->execute();
@@ -91,10 +93,10 @@ class SalsifyImportField extends SalsifyImport {
       $entity_id = array_values($results)[0];
       $entity = $this->entityTypeManager->getStorage($entity_type)->load($entity_id);
       // If the model in Salsify hasn't been updated since the last time it was
-      // imported, then skip it. If it was, then update salsify_updated and
-      // pass it along for further processing.
+      // imported, then skip it. If it was, or if an update is being forced,
+      // then update salsify_updated and pass it along for further processing.
       $salsify_updated = strtotime($product_data['salsify:updated_at']);
-      if ($entity->salsify_updated->isEmpty() || $salsify_updated > $entity->salsify_updated->value) {
+      if ($force_update || $entity->salsify_updated->isEmpty() || $salsify_updated > $entity->salsify_updated->value) {
         $entity->set('salsify_updated', $salsify_updated);
       }
       else {
@@ -186,9 +188,24 @@ class SalsifyImportField extends SalsifyImport {
               $options = substr($options, 0, $max_length);
             }
           }
+          // For taxonomy term mapping, add processing for the terms coming in
+          // from Salsify.
+          elseif ($field_config->getType() == 'entity_reference' && $field['salsify_data_type'] == 'enumerated') {
+            if (!isset($term_import)) {
+              $term_import = SalsifyImportTaxonomyTerm::create(\Drupal::getContainer());
+            }
+            $salsify_values = is_array($product_data[$field['salsify_id']]) ? $product_data[$field['salsify_id']] : [$product_data[$field['salsify_id']]];
+            $term_entities = $term_import->getTaxonomyTerms('salsify_id', $salsify_values);
+            if ($term_entities) {
+              $options = [];
+              /* @var \Drupal\taxonomy\Entity\Term $term_entity */
+              foreach ($term_entities as $term_entity) {
+                $options[] = ['target_id' => $term_entity->id()];
+              }
+            }
+          }
 
           $entity->set($field['field_name'], $options);
-          unset($product_data[$field['salsify_id']]);
         }
       }
     }

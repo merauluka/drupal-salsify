@@ -54,13 +54,12 @@ class SalsifyFields extends Salsify {
           ],
           'salsify_id'
         );
-        $manual_field_names = array_keys($manual_field_mapping);
         $salsify_id_fields = parent::getSystemFieldNames();
 
         // Only generate new fields if the import method is dynamic. Otherwise
         // only generate the required system tracking fields.
         if ($import_method == 'dynamic') {
-          $salsify_fields = array_diff_key($product_data['fields'], $manual_field_names);
+          $salsify_fields = array_diff_key($product_data['fields'], $manual_field_mapping);
         }
         else {
           $salsify_fields = array_intersect_key($product_data['fields'], $salsify_id_fields);
@@ -141,20 +140,22 @@ class SalsifyFields extends Salsify {
             }
           }
           foreach ($field_diff as $salsify_field_id => $field) {
-            $diff_field_name = $field_mapping[$salsify_field_id]['field_name'];
-            if (isset($filtered_fields[$diff_field_name])) {
-              $this->deleteDynamicField($filtered_fields[$diff_field_name]);
+            if (isset($field_mapping[$salsify_field_id])) {
+              $diff_field_name = $field_mapping[$salsify_field_id]['field_name'];
+              if (isset($filtered_fields[$diff_field_name])) {
+                $this->deleteDynamicField($filtered_fields[$diff_field_name]);
+              }
+              // Remove the options listing for this field.
+              $this->removeFieldOptions($salsify_field_id);
+              // Delete the field mapping from the database.
+              $this->deleteFieldMapping(
+                [
+                  'entity_type' => $entity_type,
+                  'bundle' => $entity_bundle,
+                  'salsify_id' => $salsify_field_id,
+                ]
+              );
             }
-            // Remove the options listing for this field.
-            $this->removeFieldOptions($salsify_field_id);
-            // Delete the field mapping from the database.
-            $this->deleteFieldMapping(
-              [
-                'entity_type' => $entity_type,
-                'bundle' => $entity_bundle,
-                'salsify_id' => $salsify_field_id,
-              ]
-            );
           }
         }
 
@@ -184,11 +185,17 @@ class SalsifyFields extends Salsify {
    *
    * @param bool $process_immediately
    *   If set to TRUE, the product import will bypass the queue system.
+   * @param bool $force_update
+   *   If set to TRUE, the updated date highwater mark will be ignored.
    */
-  public function importProductData($process_immediately = FALSE) {
+  public function importProductData($process_immediately = FALSE, $force_update = FALSE) {
     try {
       // Refresh the product field settings from Salsify.
       $product_data = $this->importProductFields();
+
+      // Import the taxonomy term data if needed and if any mappings are using
+      // entity reference fields that point to taxonomy fields.
+      $this->prepareTermData($product_data);
 
       // Import the actual product data.
       if (!empty($product_data['products'])) {
@@ -197,7 +204,7 @@ class SalsifyFields extends Salsify {
         if ($process_immediately) {
           $salsify_import = SalsifyImportField::create(\Drupal::getContainer());
           foreach ($product_data['products'] as $product) {
-            $salsify_import->processSalsifyItem($product);
+            $salsify_import->processSalsifyItem($product, $force_update);
           }
           return [
             'status' => 'status',
@@ -210,6 +217,7 @@ class SalsifyFields extends Salsify {
           $queue = \Drupal::service('queue')
             ->get('salsify_integration_content_import');
           foreach ($product_data['products'] as $product) {
+            $product['force_update'] = $force_update;
             $queue->createItem($product);
           }
         }
@@ -232,6 +240,55 @@ class SalsifyFields extends Salsify {
       ];
     }
 
+  }
+
+  protected function prepareTermData(array $product_data) {
+    $salsify_fields = $product_data['fields'];
+    $entity_type = $this->getEntityType();
+    $entity_bundle = $this->getEntityBundle();
+    $field_mappings = [
+      'dynamic' => $this->getFieldMappings(
+        [
+          'entity_type' => $entity_type,
+          'bundle' => $entity_bundle,
+          'method' => 'dynamic',
+        ],
+        'salsify_id'
+      ),
+      'manual' => $this->getFieldMappings(
+        [
+          'entity_type' => $entity_type,
+          'bundle' => $entity_bundle,
+          'method' => 'manual',
+        ],
+        'salsify_id'
+      ),
+    ];
+    $field_configs = $this->getContentTypeFields($entity_type, $entity_bundle);
+    foreach ($field_mappings as $method => $field_mappings_by_method) {
+      foreach ($field_mappings_by_method as $salsify_field_name => $field_mapping) {
+        $field_name = $field_mapping['field_name'];
+        if (isset($field_configs[$field_name])) {
+          $field_config = $field_configs[$field_name];
+          $field_type = $field_config->getType();
+          if ($field_config->getType() == 'entity_reference' && isset($salsify_fields[$salsify_field_name]['values'])) {
+            $salsify_values = $salsify_fields[$salsify_field_name]['values'];
+            $field_handler = $field_config->getSetting('handler');
+            $field_handler_settings = $field_config->getSetting('handler_settings');
+            if ($field_handler == 'default:taxonomy_term' && !empty($field_handler_settings['target_bundles'])) {
+              // Only use the first taxonomy in the list.
+              $vid = current($field_handler_settings['target_bundles']);
+              $term_import = SalsifyImportTaxonomyTerm::create(\Drupal::getContainer());
+              $salsify_ids = array_keys($salsify_values);
+              $salsify_ids_array = array_chunk($salsify_ids, 50);
+              foreach ($salsify_ids_array as $salsify_ids_chunk) {
+                $term_import->processSalsifyTaxonomyTermItems($vid, $field_mapping, $salsify_ids_chunk, $salsify_fields[$field_mapping['salsify_id']]);
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   /**

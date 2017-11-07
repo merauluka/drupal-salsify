@@ -169,6 +169,14 @@ class ConfigForm extends ConfigFormBase {
         '#collapsible' => TRUE,
         '#group' => 'salsify_operations_group',
       ];
+      $form['salsify_operations']['salsify_manual_import_method'] = [
+        '#type' => 'select',
+        '#title' => $this->t('Manual import method'),
+        '#options' => [
+          'updated' => $this->t('Only process updated content from Salsify'),
+          'force' => $this->t('Force sync all Salsify content'),
+        ],
+      ];
       $form['salsify_operations']['salsify_start_import'] = [
         '#type' => 'button',
         '#value' => $this->t('Sync with Salsify'),
@@ -213,7 +221,7 @@ class ConfigForm extends ConfigFormBase {
     $form['admin_options']['entity_reference_allow'] = [
       '#type' => 'checkbox',
       '#title' => $this->t('Allow mapping Salsify data to entity reference fields.'),
-      '#description' => $this->t('Note: This will require additional processing via custom code. Imports performed with this checked without any custom processing will likely fail.'),
+      '#description' => $this->t('Taxonomy term entity reference fields are supported by default. <em>To get this working correctly with entities other than taxonomy terms, additional processing via custom code will likely be required. Imports performed with this checked without any custom processing are subject to failure.</em>'),
       '#default_value' => $config->get('entity_reference_allow'),
     ];
 
@@ -269,7 +277,12 @@ class ConfigForm extends ConfigFormBase {
     if ($trigger['#id'] == 'edit-salsify-start-import') {
       $container = \Drupal::getContainer();
       $product_feed = SalsifyFields::create($container);
-      $results = $product_feed->importProductData(TRUE);
+      $update_method = $form_state->getValue('salsify_manual_import_method');
+      $force_update = FALSE;
+      if ($update_method == 'force') {
+        $force_update = TRUE;
+      }
+      $results = $product_feed->importProductData(TRUE, $force_update);
       if ($results) {
         drupal_set_message($results['message'], $results['status']);
       }

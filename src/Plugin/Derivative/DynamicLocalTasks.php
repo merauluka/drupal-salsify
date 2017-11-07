@@ -13,8 +13,9 @@ class DynamicLocalTasks extends DeriverBase {
    * {@inheritdoc}
    */
   public function getDerivativeDefinitions($base_plugin_definition) {
+    // If the media entity module is installed, then make the media tab and its
+    // mapping fields available for use with Salsify.
     if (\Drupal::moduleHandler()->moduleExists('media_entity')) {
-
       // Build the base base for the Media Mapping fields.
       $this->derivatives['salsify_integration.media_mapping'] = $base_plugin_definition;
       $this->derivatives['salsify_integration.media_mapping']['title'] = t('Media Field Mapping');
